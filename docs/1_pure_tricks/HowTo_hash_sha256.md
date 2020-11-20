@@ -70,7 +70,7 @@ Tests of `crypto.subtle.digest('SHA-256', new TextEncoder().encode(TXT))`:
 
     Medium texts `'hello sunshine' * 200`, Cloudflare lets them run 330 times, ca. 0.2ms. Nothing.  
 
-3. `https://cloudflareworkers.com/#cbfc7e7a0fa506f2850edb72a547760a:https://tutorial.cloudflareworkers.com/`
+3. `https://cloudflareworkers.com/#43e5bd67e21648d57a1557f2cf1d04a5:https://tutorial.cloudflareworkers.com/`
 
     Long texts `'hello sunshine' * 20000`, Cloudflare lets them run 33 times, ca. 1.2ms. Almost Nothing.  
 
