@@ -58,6 +58,23 @@ async function passHash(SECRET) {
 }
 ```
 
+## Performance
+
+Tests of `crypto.subtle.digest('SHA-256', new TextEncoder().encode(TXT))`:
+ 
+1. `https://cloudflareworkers.com/#cbfc7e7a0fa506f2850edb72a547760a:https://tutorial.cloudflareworkers.com/`
+
+   Short texts `'hello sunshine123'`. Cloudflare lets them run 420 times, ca. 0.1ms. Nothing.  
+
+2. `https://cloudflareworkers.com/#5cf4f35e16fa30a0ce11479dbd3cdc04:https://tutorial.cloudflareworkers.com/`
+
+    Medium texts `'hello sunshine' * 200`, Cloudflare lets them run 330 times, ca. 0.2ms. Nothing.  
+
+3. `https://cloudflareworkers.com/#cbfc7e7a0fa506f2850edb72a547760a:https://tutorial.cloudflareworkers.com/`
+
+    Long texts `'hello sunshine' * 20000`, Cloudflare lets them run 33 times, ca. 1.2ms. Almost Nothing.  
+
+
 ## References:
 
 * 
