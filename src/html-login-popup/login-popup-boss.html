@@ -1,0 +1,32 @@
+<h1>hello sunshine</h1>
+<a href="one" title="this is 1">open 'one'</a><br>
+<a href="two" title="this is 2">open 'two'</a>
+
+<script>
+  window.addEventListener('message', e => console.log(e)); //printing the message
+  for (let link of document.querySelectorAll("a"))
+    link.addEventListener('click', openRequestedSinglePopup);
+
+  function popupParameters() {
+    const width = Math.min(600, window.screen.width);
+    const height = Math.min(600, window.screen.height);
+    const left = window.screen.width / 2 - width / 2;
+    const top = window.screen.height / 2 - height / 2;
+    return "resizable,scrollbars,status,opener," +
+      Object.entries({width, height, left, top}).map(kv => kv.join('=')).join(',');
+  }
+
+  let loginWindow;
+  let loginWindowUrl;
+
+  function openRequestedSinglePopup(event) {
+    event.preventDefault();
+    const url = event.currentTarget.href;
+    if (!loginWindow || loginWindow.closed)
+      loginWindow = window.open(url, "_blank", popupParameters());
+    else if (loginWindowUrl !== url)
+      loginWindow.location = url;
+    loginWindowUrl = url;
+    loginWindow.focus();
+  }
+</script>
