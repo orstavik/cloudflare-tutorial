@@ -1,13 +1,15 @@
 # HowTo: Decrypt a message using AES-GCM?
 
-First, it is necessary to split encrypted string to separate the `iv` and the encrypted data. Then convert `iv` to _UTF-8_ and encrypted string to Base64 format. Since the data encrypted with `btoa()`, `atob()` is used to decrypt the data, which returns the original string.
+For the *symmetric* AEC-GCM algorithm, the process of decryption is more or less the exact reverse of the encryption process. Thus, to decrypt, we therefore need the following two methods:   
 
 ```javascript
 async function decryptAESGCM(password, iv, ctStr) {
-  const key = await makeKeyAESGCM(password, iv);  //make crypto key 
-  const ctUint8 = new Uint8Array(ctStr.match(/[\s\S]/g).map(c => c.charCodeAt(0))); // ciphertext as Uint8Array
-  const plainBuffer = await crypto.subtle.decrypt({ name: key.algorithm.name, iv: iv }, key, ctUint8); // decrypt ciphertext using key
-  return new TextDecoder().decode(plainBuffer);   // return the plaintext
+  const key = await makeKeyAESGCM(password, iv); 
+  // ciphertext as Uint8Array
+  const ctUint8 = new Uint8Array(ctStr.match(/[\s\S]/g).map(c => c.charCodeAt(0))); 
+  const plainBuffer = await crypto.subtle.decrypt({ name: key.algorithm.name, iv: iv }, key, ctUint8);
+  // return the buffer as a string object
+  return new TextDecoder().decode(plainBuffer);   
 }
 
 async function decryptData(password, data) {
@@ -17,6 +19,11 @@ async function decryptData(password, data) {
   return await decryptAESGCM(password, iv, cipher);
 }
 ```
+
+And these two methods depend on the following pure functions not already in use by the encrypt function:
+
+* [`hexStringToUint8(...)`](HowTo_makeEncryptionIV.md)
+* [`fromBase64url(...)`](HowTo_base64url.md)
 
 ## Demo
 
