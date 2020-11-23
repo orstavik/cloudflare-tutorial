@@ -56,7 +56,7 @@ of that is stored in the user's browser until a certain period expires. The brow
 
 ## HowTo: `cookie` and `set-cookie`
 
-When the browser makes an HTTP request to a server, the browser automatically appends all relevant cookies in the `cookie` header of the HTTP request. The browser selects *relevant* cookies based on cookie settings such as `domain`, `path` and `max-age`. Cookies are added to the header as a string where each attribute is formatted as a `key=value` pair separated by a `;`.
+When the browser makes an HTTP request to a server, the browser automatically appends all relevant cookies in the `cookie` header of the HTTP request. The browser selects *relevant* cookies based on cookie settings such as `domain`, `path` and `max-age`. Cookies are appended to the `cookie` header as a string where each attribute is formatted as a `key=value` pair separated by a `;`.
 
 The server can add a cookie to the browser by adding a `set-cookie` HTTP response header to a `Response`. When the browser receives a `set-cookie` header, the browser update(overwrite) the value for that cookie in its cookie store.
 
