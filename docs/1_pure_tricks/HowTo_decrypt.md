@@ -1,5 +1,22 @@
 # HowTo: Decrypt a message using AES-GCM?
 
+First, it is necessary to split encrypted string to separate the `iv` and the encrypted data. Then convert `iv` to _UTF-8_ and encrypted string to Base64 format. Since the data encrypted with `btoa()`, `atob()` is used to decrypt the data, which returns the original string.
+
+```javascript
+async function decryptAESGCM(password, iv, ctStr) {
+  const key = await makeKeyAESGCM(password, iv);  //make crypto key 
+  const ctUint8 = new Uint8Array(ctStr.match(/[\s\S]/g).map(c => c.charCodeAt(0))); // ciphertext as Uint8Array
+  const plainBuffer = await crypto.subtle.decrypt({ name: key.algorithm.name, iv: iv }, key, ctUint8); // decrypt ciphertext using key
+  return new TextDecoder().decode(plainBuffer);   // return the plaintext
+}
+
+async function decryptData(password, data) {
+  const [ivText, cipherB64url] = data.split('.');  //split encrypted data to get iv and cipher
+  const iv = hexStringToUint8(ivText);
+  const cipher = atob(fromBase64url(cipherB64url));
+  return await decryptAESGCM(password, iv, cipher);
+}
+```
 
 ## Demo
 
@@ -70,27 +87,30 @@ async function decryptAESGCM(password, iv, ctStr){
   const plainBuffer = await crypto.subtle.decrypt({name: key.algorithm.name, iv: iv}, key, ctUint8);                 // decrypt ciphertext using key
   return new TextDecoder().decode(plainBuffer);                                       // return the plaintext
 }
+
+async function encryptData(password, plaintext) {          
+    const iv = crypto.getRandomValues(new Uint8Array(12)); 
+    const cipher = await encryptAESGCM(password, iv, plaintext);
+    return uint8ToHexString(iv) + '.' + toBase64url(btoa(cipher));
+}
+
+async function decryptData(password, data) {
+  const [ivText, cipherB64url] = data.split('.');  //split encrypted data to get iv and cipher
+  const iv = hexStringToUint8(ivText);
+  const cipher = atob(fromBase64url(cipherB64url));
+  return await decryptAESGCM(password, iv, cipher);
+}
 //ENCRYPT & DECRYPT end
 
 const SECRET = 'klasjdfoqjpwoekfj!askdfj';
 
 const plaintext = 'hello sunshine';
-
 console.log(plaintext);
-
-const iv = crypto.getRandomValues(new Uint8Array(12));
-const cipher = await encryptAESGCM(SECRET, iv, plaintext);
-const encrypted = uint8ToHexString(iv) + '.' + toBase64url(btoa(cipher));
+const encrypted = await encryptData(SECRET, plaintext);
 console.log(encrypted);
-
-const [ivString, ciphertext] = encrypted.split('.');
-const ciphertextRaw = atob(fromBase64url(ciphertext));
-const iv = hexStringToUint8(ivString);
-const decrypted = await decryptAESGCM(SECRET, iv, ciphertextRaw);
+const decrypted = await decryptData(SECRET, encrypted); 
 console.log(decrypted);
 ```
 
 ## Reference
-* [Wikipedia: Galois/Counter Mode](https://en.wikipedia.org/wiki/Galois/Counter_Mode)
-* [MDN: importKey](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey)
-* [MDN: btoa()](https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/btoa)
+

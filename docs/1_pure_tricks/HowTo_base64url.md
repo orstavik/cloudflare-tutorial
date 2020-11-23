@@ -62,4 +62,5 @@ console.log(str2);
 
 ## References:
 
- * 
+* [MDN: atob()](https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/atob)
+* [MDN: btoa()](https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/btoa)
