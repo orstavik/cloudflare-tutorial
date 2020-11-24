@@ -1,14 +1,5 @@
 # WhatIs: `httpOnly` cookie?
 
- 
-
-## Sessions in web apps
-
-There are many `session` state container Web apps establish sessions in different ways.  Most web apps have no state on the server:  do not have a session; they are simply static pages. 
-
-Most commonly the second, state mutating approach is taken when session data is stored. The reason for this is that state locations are commonly constrained in terms of space. For example, HTTP cookies are limited to 50 cookies, 40mb a piece. So, most commonly, your architectural choice is non-existent: you must *mutate* your session state data *in place* because either space scarcity or conventional conformity says so.
-
-
 ## Why: HTTP cookies?
  
 HTTP cookies do three things: 
@@ -20,7 +11,6 @@ HTTP cookies do three things:
 3. Cookies can *manually* be sent from the server to the browser. Ecce! Web apps running on the server can share state information with web apps running in the browser using cookies.
 
 Web apps use cookies for *many* different tasks: remember selected elements, user preferences, registration data, location data on a web page. This state information is commonly referred to as a "session".
-
 
 ## WhatIs: a cookie?
 
@@ -40,6 +30,7 @@ The cookie dies when either a) the browser is closed and no `max-age` nor `expir
 
 > Cookies can also be created and mutated in the browser. As long as the cookie is not marked `httpOnly`, javascripts in the browser can create and change and kill cookies. This of course is necessary for cookies to contain state information about which items are placed in a shopping-cart, or which items the user has hovered with his/her mouse.
  
+So, most commonly, your architectural choice is non-existent: you must *mutate* your session state data *in place* because either space scarcity or conventional conformity says so.
 
 ##### continue here
 
