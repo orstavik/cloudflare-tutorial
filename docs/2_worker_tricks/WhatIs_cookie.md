@@ -1,4 +1,13 @@
-# WhatIs: HTTP cookie?
+# WhatIs: `httpOnly` cookie?
+
+ 
+
+## Sessions in web apps
+
+There are many `session` state container Web apps establish sessions in different ways.  Most web apps have no state on the server:  do not have a session; they are simply static pages. 
+
+Most commonly the second, state mutating approach is taken when session data is stored. The reason for this is that state locations are commonly constrained in terms of space. For example, HTTP cookies are limited to 50 cookies, 40mb a piece. So, most commonly, your architectural choice is non-existent: you must *mutate* your session state data *in place* because either space scarcity or conventional conformity says so.
+
 
 ## Why: HTTP cookies?
  
@@ -12,20 +21,6 @@ HTTP cookies do three things:
 
 Web apps use cookies for *many* different tasks: remember selected elements, user preferences, registration data, location data on a web page. This state information is commonly referred to as a "session".
 
-## WhatIs: a "session"?
-
-A **session** is a sequence of individual actions that 
-1. span across both locations (e.g. both client and server),
-2. span across time (e.g. two different times a user visits the same web app/domain), and
-3. that are bound together by a common denominator, which most commonly is the same user (or more crudely the same browser on the same computer).
-
-To implement a 'session' you need simply to create/access a data store that can room your values. This data store must be accessible both across the time span you require, and from all the different locations that is required.
- 
-When you add state information during a session, you have an architectural choice to make:
-1. Immutable state? Ie. keep adding information about actions, so that the session data store continues to grow and grow until the session ends, or
-2. Mutable state? Ie. change state information as variables, *in place*, so that the different entities that read and writes state information all work against and alter the same locations.
-
-Most commonly the second, state mutating approach is taken when session data is stored. The reason for this is that state locations are commonly constrained in terms of space. For example, HTTP cookies are limited to 50 cookies, 40mb a piece. So, most commonly, your architectural choice is non-existent: you must *mutate* your session state data *in place* because either space scarcity or conventional conformity says so.
 
 ## WhatIs: a cookie?
 
