@@ -1,32 +1,5 @@
 #  HowTo: make a sessionID cookie using Cloudflare workers
 
-HTTP cookie provide the server with a mechanism for storing and receiving status information in the client application system. This mechanism allows web applications to store information about selected elements, user preferences, registration information and keeping a user in the same place on a web page if they lose their Internet connection, or to store simple site display settings.
-
-A cookie is a key-value data pair that is stored in the user's browser until a certain period expires. The browser will store this information and pass it to the server with each request as part of the HTTP header. In technical terms, cookies are small text files. 
-
-## `Set-Cookie` HTTP response header
-
- The Set-Cookie HTTP response header is used to send cookies from the server to the user agent.
- When the user agent receives a `Set-Cookie` header, the user agent stores the cookie together with its attributes.  Subsequently, when the user agent makes an HTTP request, the user agent includes the applicable, non-expired cookies in the Cookie header. If the user agent receives a new cookie with the same cookie-name, domain-value, and path-value as a cookie that it has already stored, the existing cookie is evicted and replaced with the new cookie. Notice that servers can delete cookies by sending the user agent.
-
-
-## `Set-Cookie` header attributes.
-
-> Cookies have a number of settings, many of which are important and must be set. These settings specified after the `key=value` pair and are separated by a `;`.
-
- Attributes are set by the server to control the processing of cookies on the client. They are all optional and have default values:
- 
- - `expires` - date and time of expiration. By default, cookies are valid until the web browser session ends;
- - `max-age` - lifetime of cookie in seconds. If specified, it overrides the expires value;
- - `domain` - limits the scope of cookie validity to the specified domain and all its subdomains;
- - `path`  - is a path that limits the scope of the cookie. `It consists of directory components, separated by the symbol /`. A cookie is included in requests whose URI starts with the corresponding path components. If no attribute is set, the path is taken from the request URI.
-- `secure` - the flag set in Secure allows the transfer of cookies only through a secure channel. In particular, if the flag is set, the cookie will not be transmitted `over HTTP, but will be over HTTPS`. By default, the flag is not set.
- - `httponly` - the flag set in HttpOnly, limits the scope of cookie use only within the HTTP protocol. If this flag is enabled, it will not be possible to access cookies from JavaScript through the browser API. This flag is not set by default.
-
- > Session cookies are removed when the client shuts down. Cookies are session cookies if they don't specify the `Expires` or `Max-Age` attributes.
-
-> We only need `Max-Age`, we do not need `Expires`. When `Max-Age` is set, it will always override `Expires` anyway.
-
 ```javascript
 const addForgetmeSessionCookieHeader ={
   'Set-Cookie': "my-cookie=my-value; Secure; HttpOnly; SameSite=Strict; Max-Age=3600"//60sec*60min=1hour
@@ -144,8 +117,10 @@ Note. It is not possible to set a cookie for domains that are two levels up, ie.
 
 5. `Path=/my/path` is a path that limits the scope of the cookie. It consists of directory components, separated by the symbol `/`. A cookie is included in requests whose URI starts with the corresponding path components. If no attribute is set, the path is taken from the request URI.
 
-## HowTo: RememberMe or ForgetMe or Rolling cookies?
+## WhatIs: RememberMe or ForgetMe or Rolling cookies?
 
+> Session cookies are removed when the client shuts down.
+>
 To make the browser either forget the session when the browser window closes, or remember the user's login even while the browser is shut down, use the `Max-age` attributes on `Set-Cookie`. The value of `Max-Age` is a TTL number in seconds after last `Set-Cookie` directive in a response.
 
 > `Expires` is an older alternative to `Max-Age`. It require a more complex Date UTC format value (`new Date().toUTCString()`), and is always overridden by `Max-Age` when both attributes are set.
@@ -310,3 +285,4 @@ You can't rely on users logging out for security: others might come in and use t
 * [RFC 6265](https://tools.ietf.org/html/rfc6265#section-4.1)
 * [Blog: "Just how many web users really disable cookies or JavaScript?"](https://blog.yell.com/2016/04/just-many-web-users-disable-cookies-javascript/)
 * [sending cookies using fetch](https://github.com/github/fetch#user-content-handling-http-error-statuses)
+* [default value of path or domain](https://stackoverflow.com/questions/43324480/how-does-a-browser-handle-cookie-with-no-path-and-no-domain#answer-43336097)
