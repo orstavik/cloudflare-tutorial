@@ -2,7 +2,7 @@
 
 ## WhatIs: a cookie?
 
-A cookie is a key-value data pair. The cookies are **automatically stored client-side** in the (long-term) memory of browsers; they are usually **not** stored server-side (although server-side apps often store cookies in order to track their users). 
+A cookie is a key-value data pair. The cookies are **automatically stored client-side** in the (long-term) memory of browsers; they are usually **not** stored server-side (although server-side apps often store cookies in order to track their users). Commonly, HTTP cookies are created by being set in the header of an HTTP Response going from the server to the browser, and then the same cookie is then returned from the browser to the server in subsequent the request headers. 
 
 Web apps use cookies for *many* different tasks: remember selected elements, user preferences, registration data, location data on a web page. This state information is commonly referred to as a "session". 
 

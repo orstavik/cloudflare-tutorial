@@ -11,21 +11,13 @@ const deleteSessionCookieHeader ={
   'Set-Cookie': "my-cookie=my-value; Secure; HttpOnly; SameSite=Strict; Max-Age=0" }
 ```
 
-A session is controlled by the server. Cookies are used to mark the browser in the eyes of the server. HTTP Cookies that are set in the response header from the server to the browser, and then returned from the browser to the server in the request header.
-
-HTTP cookies enable cloudflare workers (the server) to store and receive state in the browser (the client). The cookie itself is a simple keyString=>valueString. The cookie has several other properties that control its expiration time and the access to the cookie from tabs/iframes in the browser loaded from other servers. RFC 6265 require the web browser to store from 50 cookies per domain with the size of each(including attributes) from 4096 bytes. Developers should expect that the browser and the user can delete cookies every time the browser is closed.
-
 ## SessionID cookie
 
 > Session: a set of interactions between f.x. a user and an application that take place within a given timeframe.
 
-HTTP cookies can manage a session that takes place between:
-1. a cf worker (server app),
-2. a user,
-3. a (trusted) browser, and
-4. an HTML/JS app in the browser.
-
-When we use HTTP cookies to control a session between these four actors, we call it a sessionID cookie. A sessionID cookie is a secure cookie, and we will describe here how to secure them. This guide describes what the cloudflare worker should tell the browser in order to protect a user's data run from that cloudflare worker.
+A sessionID cookie needs to be controlled by the server. The server holds the secured data in its database, and so the server needs to use sessionID cookies to ensure that only trusted users get access to their portion of the database.
+ 
+The server accomplishes this by issuing a sessionID cookie to browsers when they log in. When a user logs in, the server gives the user's browser a cookie that will stay active for a specified period in time, and whenever the user's browser makes a new HTTP request to that server, the browser will pass along this sessionID cookie that it got from the HTTP response when it logged in, and when the server sees this cookie, it will treat the browser as that user.
 
 ## Demo: Cf worker setting and getting secure sessionID cookie
 
