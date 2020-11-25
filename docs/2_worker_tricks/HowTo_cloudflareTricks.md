@@ -1,21 +1,37 @@
 # cloudflare tricks
 
-## see all the headers
+## HowTo: display `request.headers`
 
-see all the cloudflare headers! [https://cloudflareworkers.com/?&_ga=2.225834073.2138029206.1602683608-1010365947.1600154718#1397c93ebb1d69a989d6d0357160c9c2:https://tutorial.cloudflareworkers.com](https://cloudflareworkers.com/?&_ga=2.225834073.2138029206.1602683608-1010365947.1600154718#1397c93ebb1d69a989d6d0357160c9c2:https://tutorial.cloudflareworkers.com).
+Remember `Array.from(..)` around `.keys()` and `.entries()` which just return an iterator.
+
+[see all the cloudflare headers!](https://cloudflareworkers.com/?&_ga=2.225834073.2138029206.1602683608-1010365947.1600154718#12a9195720fe4ed660949efdbd9c0219:https://tutorial.cloudflareworkers.com).
 
 ```javascript
-addEventListener('fetch', event => event.respondWith(handleRequest(event.request)));
-
 async function handleRequest(request) {
-  let result = 'url: ' + request.url + '\n';
-  for (const header of request.headers) {
-    result += 'header: ' + header + '\n';
-  }
-  const referer = new URL(request.headers.get('referer')).origin;
-  console.log(referer);
-  return new Response(result);
+  const headers = Array.from(request.headers);
+  return new Response(
+    'url: ' + request.url + '\n' + 
+    'referer: ' + request.headers.get('referer') + '\n' + 
+    headers.map(header => `header: ${header}`).join('\n')
+  );
 }
+
+addEventListener('fetch', event => event.respondWith(handleRequest(event.request)));
+```
+
+## HowTo: display `urlSearchParams`
+
+Remember `Array.from()`.
+
+[see all the searchParams!](https://cloudflareworkers.com/#36cfc6c10bf9440a3ed0ff5d84e02abb:https://example.com/?alice&bob=sunshine&cat)
+
+```javascript
+
+const url = new URL('https://example.com/?alice&bob=sunshine&cat');
+const entries = Array.from(url.searchParams.entries());
+var keys = Array.from(url.searchParams.keys());
+console.log(`entries:${JSON.stringify(entries)}.`);
+console.log(`keys:${JSON.stringify(keys)}.`);
 ```
         
 ## analyze the cf-request-id and cf-ray
