@@ -125,4 +125,5 @@ addEventListener("fetch", e => e.respondWith(handleRequest(e.request)));
 
 ## References
 
+ * [MDN: multiple <base> elements](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base#Multiple_%3Cbase%3E_elements)
  * [workers: HTMLRewriter](https://developers.cloudflare.com/workers/runtime-apis/html-rewriter)
