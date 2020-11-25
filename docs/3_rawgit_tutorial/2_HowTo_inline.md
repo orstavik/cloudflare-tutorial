@@ -1,5 +1,11 @@
 # HowTo: inline?
 
+need to split into 3 md files:
+0. how base is interpreted during page load.md file that describes how base is interpreted during the reading of the html element so that links that are loaded! before the base, gets the page location as base, while links that are loaded after the first base being set, gets a different base. The pureHtmlTest repository example.
+1. inline css
+2. inline js
+3. inject js script with json data with for example cookie values. Or other data properties only known by the server.
+
 [demo](https://cloudflareworkers.com/#a75090bc3d7ec3a198158de0ecde4271:https://tutorial.cloudflareworkers.com/test/index.html)
 
 ## Demo: inliner
@@ -116,14 +122,6 @@ async function handleRequest(request) {
 
 addEventListener("fetch", e => e.respondWith(handleRequest(e.request)));
 ```
-
-## Comments
-
-The worker will only tell the browser to cache github permalinks, all other files should have a cache to be 0. This should mean that if a developer is working against a `master` version, then for such files, the browser's native cache will not be active. (This doesn't apply to the service worker cache though.)  
-
-When the global variables are altered, the worker will be restarted and all in memory cache will be wiped. This is not a problem, it is fine.
-
-If the content of the cache exceeds the worker memory limit, then use an LRU cache instead.
 
 ## References
 
