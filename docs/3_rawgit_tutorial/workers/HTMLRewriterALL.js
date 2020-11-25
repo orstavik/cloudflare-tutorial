@@ -1,16 +1,3 @@
-# HowTo: inline?
-
-need to split into 3 md files:
-0. how base is interpreted during page load.md file that describes how base is interpreted during the reading of the html element so that links that are loaded! before the base, gets the page location as base, while links that are loaded after the first base being set, gets a different base. The pureHtmlTest repository example.
-1. inline css
-2. inline js
-3. inject js script with json data with for example cookie values. Or other data properties only known by the server.
-
-[demo](https://cloudflareworkers.com/#a75090bc3d7ec3a198158de0ecde4271:https://tutorial.cloudflareworkers.com/test/index.html)
-
-## Demo: inliner
-
-```javascript
 //this demo produces red text on lightblue background.
 const HTML = `<html>
 <head>
@@ -66,7 +53,7 @@ class InlineMutator {
         this.secondBase = new URL(el.getAttribute('href'), this.firstBase).href;
       return;
     }
-    
+
     const src = el.getAttribute('src');
     el.removeAttribute('src');
     el.removeAttribute('app-inline');
@@ -121,8 +108,3 @@ async function handleRequest(request) {
 }
 
 addEventListener("fetch", e => e.respondWith(handleRequest(e.request)));
-```
-
-## References
-
- * [workers: HTMLRewriter](https://developers.cloudflare.com/workers/runtime-apis/html-rewriter)
