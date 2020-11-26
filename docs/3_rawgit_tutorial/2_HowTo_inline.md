@@ -71,7 +71,7 @@ class InlineMutator {
     el.removeAttribute('src');
     el.removeAttribute('app-inline');
     const path = new URL(src, this.secondBase || this.firstBase).pathname;
-    const body = FILES[path];
+    const body = FILES[path];//fetch(....);
     if (body)
       el.setInnerContent(body);
   }
