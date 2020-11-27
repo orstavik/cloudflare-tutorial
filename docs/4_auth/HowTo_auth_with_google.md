@@ -103,3 +103,69 @@ const keyType = {
  * [page nr 2 for google describing oauth2](https://developers.google.com/identity/protocols/oauth2/web-server)
  * [https://www.googleapis.com/oauth2/v3/certs](https://www.googleapis.com/oauth2/v3/certs) 
 
+## lifecycle #1
+```
+b=>s1
+1.browser opens
+ auth.example.com/login/google
+
+s1=>b
+2. 302 example.com=> google
+ auth.example.com receives the requests, generate a login link at google service, and sends a 302 redirect back to the user
+
+b=>s2
+3. browser receives the redirect and automatically try to load the page from google
+
+s2=>b
+4. google openid gets the request, and the returns a 200 response to the browser with an interface where the user can type his password.
+
+b=>s2
+5. browser sends user+pass req to google
+
+s2=>b
+6. 302 google => example.com
+google verify the user+pass and then sends a 302 redirect to auth.example.com/callback/google?code
+
+b=>s1
+7. browser receives the 302 and automatically requests to open auth.example.com/callback/google?code 
+
+s1=>s2=>s1
+8. server-server auth.example.com => google.com with the code
+the auth.example.com then processes the callback from google. It does so by contacting google directly via a fetch to get the user data. using the code and the secret clientID.
+
+s1=>b
+9. 200 example.com => user with the user data
+the auth.example.com can now send the user data back to the user as a response to the request 7 from browser. 
+```
+## lifecycle #2
+```                               
+b=>s1
+1.browser opens
+ auth.example.com/login/google
+
+s1=>b
+2. 302 example.com=> google
+ auth.example.com receives the requests, generate a login link at google service, and sends a 302 redirect back to the user
+
+b=>s2
+3. browser receives the redirect and automatically try to load the page from google
+
+s2=>b
+4. google openid gets the request. 
+with this request comes a lot of cookies, and one of these cookies tells google that the user has already logged in to this service, and does not have to do it again. (this is not only a cookie, google has server data also/instead, but the effect is the same). 302 google => example.com
+
+the google auth openid server can therefore skip step 5. and 6., so that step 4 now essentially works as step 6. s2 now returns a 302 redirect to auth.example.com/callback/google?code.
+
+b=>s1
+7. browser receives the 302 and automatically requests to open auth.example.com/callback/google?code 
+
+s1=>s2=>s1
+8. server-server auth.example.com => google.com with the code
+the auth.example.com then processes the callback from google. It does so by contacting google directly via a fetch to get the user data. using the code and the secret clientID.
+
+s1=>b
+9. 200 example.com => user with the user data
+the auth.example.com can now send the user data back to the user as a response to the request 7 from browser. 
+```
+
+when things doesn't work, the user should be given a message, but not too specific in case of hackers. Google will tell the user if the password is wrong. the only ok thing that can happen, is that a user timeout on state param. or the server switches keys.
