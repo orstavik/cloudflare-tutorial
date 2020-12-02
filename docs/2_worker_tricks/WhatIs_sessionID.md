@@ -1,4 +1,4 @@
-# WhatIs: a SessionID?
+# WhatIs: a SessionID cookie?
 
 > Session: a set of interactions between f.x. a user and an application that take place within a given timeframe.
 
@@ -17,7 +17,7 @@ However, when the server shares the sessionID with the browser, things gets a li
 1. reading the content of the sessionID (keep it secure), and
 2. not be able to use it from unsafe contexts?
 
-## `secure`, `httpOnly`, and `same-site`
+## `secure`, `httpOnly`, and `SameSite`
 
 There are three properties for cookies that can be used to make them safe:
 
@@ -25,13 +25,13 @@ There are three properties for cookies that can be used to make them safe:
 
 2. `httpOnly` ensures that no javascript can access the cookie while the browser has it. This ensures that the cookie remains a secret from nepharious scripts in the browser.
 
-3. `same-site=lax` partially ensures that only pages or scripts served directly/laxly from your own server are allowed to attach this cookie to subsequent requests made to your server. All other pages/scripts that trigger an HTTP request for a resource on your server are unsafe, and the browser will not append the cookie to any requests they make.
+3. `SameSite=lax` partially ensures that only pages or scripts served directly/laxly from your own server are allowed to attach this cookie to subsequent requests made to your server. All other pages/scripts that trigger an HTTP request for a resource on your server are unsafe, and the browser will not append the cookie to any requests they make.
 
-## The difference between `same-site=lax` and `same-site=strict`
+## The difference between `SameSite=lax` and `SameSite=strict`
 
-`same-site=strict` attaches the cookie *only* when the request is made from an html page and/or javascript that themselves are loaded from your server. This means that top-level navigation such as link clicks do not get your cookie. The downside of not adding cookie to top-level navigation is that you must have two roundtrips between server and browser: first you request the page without a cookie, and then your page will make a second request with the `strict` cookie to obtain the user data (for example as a json file).
+`SameSite=strict` attaches the cookie *only* when the request is made from an html page and/or javascript that themselves are loaded from your server. This means that top-level navigation such as link clicks do not get your cookie. The downside of not adding cookie to top-level navigation is that you must have two roundtrips between server and browser: first you request the page without a cookie, and then your page will make a second request with the `strict` cookie to obtain the user data (for example as a json file).
 
-`same-site=lax` attaches the cookie in the same situations as `same-site=strict`, but it also attaches the cookie during top-level navigation. This means that the cookie is sent when the user clicks a link, and the server can fill the page with suitable content. However, this means that the `same-site=lax` can also be triggered by other scripts in calls such as: 
+`SameSite=lax` attaches the cookie in the same situations as `SameSite=strict`, but it also attaches the cookie during top-level navigation. This means that the cookie is sent when the user clicks a link, and the server can fill the page with suitable content. However, this means that the `SameSite=lax` can also be triggered by other scripts in calls such as: 
 ```javascript
 const hack = window.open('https://inn.ocent.com/?password=omg', "_blank"); 
 hack.close();
@@ -70,14 +70,14 @@ It is important that the server doesn't grant any extra `CORS` privileges to any
 
 Ok. So we have the following solution for sessionID in the browser over `HTTPS`.
 1. **anonymous read or write**: the referer of the request is checked against a CORS-whitelist. For requests coming from **outside domains**, an `Access-Control-Allow-Origin` with the whitelisted domain is added. 
-2. **private read** requests: server checks an `httpOnly, secure, same-site=lax cookie`, with NO `CORS` headers.
-3. **Write** requests: server checks an `httpOnly, secure, same-site=lax cookie`, and checks that the request has `POST` method and a whitelisted `referer` header.
+2. **private read** requests: server checks an `httpOnly, secure, SameSite=lax cookie`, with NO `CORS` headers.
+3. **Write** requests: server checks an `httpOnly, secure, SameSite=lax cookie`, and checks that the request has `POST` method and a whitelisted `referer` header.
 
 The question is, can we trust this solution? And if not, why and when?
 Can we trust the that the browser:
 
 1. HTTPS ensures that neither the `cookie`, `referer`, nor `method` headers stay secret and cannot be tampered with.
-2. `httpOnly`, `secure` and `same-site=lax` ensures that the sessionID stay hidden from any prying scripts and are not sent inadvertently to any other server.
+2. `httpOnly`, `secure` and `SameSite=lax` ensures that the sessionID stay hidden from any prying scripts and are not sent inadvertently to any other server.
 3. Checking `referer` and `method` on the server ensures that CSRF requests cannot be triggered by any other scripts or pages the user happens to open up in his browser.
 
 So, what are we missing? Why do we need CSRF tokens?
@@ -86,6 +86,7 @@ So, what are we missing? Why do we need CSRF tokens?
 
 ### References 
 
+* https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite#Lax
 * https://web.dev/referrer-best-practices/
 * https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
 * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin
