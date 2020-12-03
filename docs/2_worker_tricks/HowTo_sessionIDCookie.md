@@ -1,276 +1,134 @@
-#  HowTo: make a sessionID cookie using Cloudflare workers
+# HowTo: make sessionID with cookies?
+
+## HowTo: `secure` an `httpOnly` cookie?
+
+A cookie is a `name=value;` string. To a cookie, you can append yet more attributes as `key=value;` pairs.
+
+A cookie can be fully secured in modern browsers that support other technologies such as web components, using the
+following settings:
+
+1. `Secure;` The browser will only add the cookie in `https` request, the cookie will never be sent from the browser to
+   the server in unsecure `http` requests. The browsers' default value is `Secure=false`, so you should always
+   add `Secure;`.
+
+2. `HttpOnly;`. The browser only stores and automatically appends the cookie to apropriate HTTP requests. No js script,
+   not even from your own site, can read the cookie. No js, never. Browsers default is `HttpOnly=false`, and you should
+   always set `httpOnly;` if you don't specifically need to access the cookie from js.
+
+3. `SameSite=Lax;`. The cookie will only be sent from the browser to the server when a) the script or html element that
+   requests a resource is loaded from the `SameSite`, or b) when the browser navigates to a `.html` page from that
+   server (either directly in the navigation bar, or via clicking a link). `SameSite=Lax` restrict scripts and html
+   pages from passing a cookie to your server when they make `fetch(...)` requests, or requests a `js` script,
+   an `<img src>`, or a `<link rel=stylesheet>` from your server, for example. Soon, modern browsers will default
+   to `SameSite=Lax`, but for now old browsers default to `SameSite=None`.
+
+4. `Domain=.example.com;`. The cookie will be sent from the browser when the request is made to a resource under the specified domain and all its subdomains, and sub-sub-domains, etc.
+    * "Super cookies" with domains such as `.com` are no longer allowed in modern browsers.
+    * You can't set a cookie on a grandparent domain. If your worker is responding from `abc.one-two-three.example.com`, this response cannot set a cookie on domain `.example.com`, only on the domain `.one-two-three.example.com`, `abc.one-two-three.example.com`, `any.subdomain.abc.one-two-three.example.com`, etc.
+    * The domain value should start with a `.`. If you forget this, the browser will automatically add a `.` as the first character. Thus, `Domain="example.com";` becomes `Domain=".example.com";` 
+
+5. `Path=/my/path;`. The path also limits the scope of the cookie. It consists of directory components, separated by the
+   symbol `/`. A cookie is included in requests whose URI starts with the corresponding path components. If no attribute
+   is set, the path is taken from the request URI and set to be the same as the `pathname` up until the last `/` (all
+   the folders, but not the filename).
+   
+## HowTo: `Max-Age`?
+
+>  [Never use `Expire`, always use `Max-Age`.](./WhatIs_httpOnly_cookie.md)
+
+* `Max-Age=-1`. The browser will forget the cookie as soon as it closes.
+* `Max-Age=0`. The browser will delete the cookie.
+* `Max-Age=300`. The browser will remember the cookie for 5min, and then forget it. The cookie is persisted to long term storage if need be, but will also be removed from the registry after 5min in all instances, even if the same browser remains open.
+* `Max-Age=2592000`. The browser will remember the cookie for a month (30days*24hrs*3600sec).
+* No `Max-Age` is set. This is the default value, but it is better to use `Max-Age=-1` in this instance, as you both clearly communicate intent and will override any `Expire` settings.
+
+By default, cookies are deleted when the browser window is closed (ie. no `Max-Age`/`Max-Age=-1`).
+
+When a short `Max-Age`, say 5min, is used, this can be problematic because it will override the "delete when window is closed" convention. Unaware users might quickly log in and perform their tasks and log out and leave a public computer, anticipating that closing the window will log them out. Not being able to tell the browser that it should delete a cookie *both* when the browser closes and within 5minutes, whichever comes first, is a problem.  
+
+When logging in, the user is often asked: `"remember me (on this computer)"`? This convention essentially translates into a sessionID cookie with a `Max-Age` of a week or a month (7*24*3600 or 30*24*3600), depending on the application.
+
+## Server: The `Set-cookie` header
+
+To make a cookie string and send it from the server to the browser, use some custom functions and the `set-cookie` header on the HTTP response object. In js it would look something like this:
 
 ```javascript
-const addForgetmeSessionCookieHeader ={
-  'Set-Cookie': "my-cookie=my-value; Secure; HttpOnly; SameSite=Strict; Max-Age=3600"//60sec*60min=1hour
-}
-const addRemembermeSessionCookieHeader ={
-  'Set-Cookie': "my-cookie=my-value; Secure; HttpOnly; SameSite=Strict; Max-Age=2592000"//30*24*3600= 1 mnth
-}
-const deleteSessionCookieHeader ={
-  'Set-Cookie': "my-cookie=my-value; Secure; HttpOnly; SameSite=Strict; Max-Age=0" }
-```
-
-## SessionID cookie
-
-> Session: a set of interactions between f.x. a user and an application that take place within a given timeframe.
-
-A sessionID cookie needs to be controlled by the server. The server holds the secured data in its database, and so the server needs to use sessionID cookies to ensure that only trusted users get access to their portion of the database.
- 
-The server accomplishes this by issuing a sessionID cookie to browsers when they log in. When a user logs in, the server gives the user's browser a cookie that will stay active for a specified period in time, and whenever the user's browser makes a new HTTP request to that server, the browser will pass along this sessionID cookie that it got from the HTTP response when it logged in, and when the server sees this cookie, it will treat the browser as that user.
-
-## Demo: Cf worker setting and getting secure sessionID cookie
-
-```javascript
-function html(txt) {
-  return `
-<h1>${txt}</h1><br>
-<a href="/logoutCookie">logoutCookie</a><br>
-<a href="/forgetMeCookie">forgetMeCookie</a><br>
-<a href="/rememberMeCookie">rememberMeCookie</a><br>
-<a href="/rollingCookie">rollingCookie</a><br>
-<a href="/${Math.random()}">hello sunshine</a><br>`;
+//cookie forgotten when the browser is closed
+function forgetMeCookie(name, value, domain) {
+  return `${name}=${value}; domain=${domain}; path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=-1;`;
 }
 
-const secureCookieSettings = {
-  Domain: '2js-no.workers.dev',
-  Secure: true,
-  HttpOnly: true,
-  SameSite: 'Strict'
-};    //remember, NO support for HTTP TRACE from your server!!!
-
-function getCookieValue(cookie, key) {
-  return cookie?.match(`(^|;)\\s*${key}\\s*=\\s*([^;]+)`)?.pop();
+//cookie remembered for an hour (3600sec)
+//cookie remembered for a month (30days*24hrs*3600sec)
+//commonly, this is the same for all instances, and so the max-age can
+//be specified as part of the fixed string.
+function rememberMeCookie(name, value, domain) {
+  return `${name}=${value}; domain=${domain}; path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000;`;
 }
 
-function cookieToStr(cookie) {
-  return Object.entries(cookie).map(([k, v]) => k + '=' + v).join('; ');
+//remove cookie from browser
+function deleteCookie(name, domain) {
+  return `${name}=0; domain=${domain}; path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0;`;
 }
 
-async function handleRequest(request) {
-  const url = new URL(request.url);
-  const [ignore, action] = url.pathname.split('/');
-
-  //setting normal cookie
-  const cookie =
-    action === 'logoutCookie' ? {iat: Date.now(), 'Max-Age': 0} :
-      action === 'forgetMeCookie' ? {iat: Date.now()} :
-        action === 'rememberMeCookie' ? {iat: Date.now(), 'Max-Age': 60 * 1} :
-          undefined;
-  if (cookie) {
-    const fullCookie = cookieToStr(Object.assign(cookie, secureCookieSettings));
-    return new Response(html(action + ' cookie: ' + fullCookie), {
-      status: 201,
-      headers: {'Content-type': 'text/html', 'Set-Cookie': fullCookie}
-    });
-  }
-
-  //setting rolling cookie
-  const cookies = request.headers.get('cookie');
-  const iatString = getCookieValue(cookies, 'iat');
-  const [iatDate, maybeRoll] = iatString?.split('.') || [];
-  const iat = new Date(parseInt(iatDate || Date.now()));
-  const roll = maybeRoll === 'roll';
-  if (roll || action === 'rollingCookie') {
-    const cookie = {iat: Date.now() + '.roll', 'Max-Age': 60 * 1};
-    const fullCookie = cookieToStr(Object.assign(cookie, secureCookieSettings));
-    return new Response(html('rolling cookie: ' + iat.toUTCString() + fullCookie), {
-      status: 201,
-      headers: {'Content-type': 'text/html', 'Set-Cookie': fullCookie}
-    });
-  }
-  return new Response(html('hello cookie: ' + iat.toUTCString()), {
-    status: 201,
-    headers: {'Content-type': 'text/html'}
-  });
-}
-
-addEventListener('fetch', e => e.respondWith(handleRequest(e.request)));
-```
-
-The demo worker has three handles: `/setCookie`, `/deleteCookie`, and everything else.
-1. when the worker `setCookie`, it adds a `Set-Cookie` header to the response with a expiration date 1 day into the future. This is typically done when the user logs in.
-2. when the worker `deleteCookie`, it adds a `Set-Cookie` header to the response with an expiration date set to *now*. This will remove the cookie from the browser, and is typically done when the user logs out.
-3. all other requests to the worker, will simply make the cookie worker print out the content of the cookie it receives from the browser.    
-
-## HowTo: secure a cookie? 
-
-Cookie settings are set as attributes after the cookie name and value in the `Set-Cookie` header. Cookie attributes are `key=value` pairs separated by a `;`. To secure a cookie, the following properties MUST BE set:
-
-1. `Secure`. The cookie will only be added when the browser and server uses `https`. Any cookie that is not `Secure` will be completely unsafe, and cannot be used to store any type of secret or private information. Keep cookies `Secure` by default. Browsers default: `Secure=false`.
-
-2. `Httponly`. The cookie cannot be accessed from JS, not even by the scripts from the domain that issued the cookie. Browsers default: `HttpOnly=false`.
-
-3. `SameSite=Strict`. The cookie will only be sent from the browser to the client when the script that sends the request is from the same domain. This means that scripts loaded from other sites cannot dispatch the registered cookie if they do a `fetch` for example. Browser default: `SameSite=Strict`.
-
-4. `Domain=.example.com`. The cookie will only be sent from the browser when the request is made to a resource under the specified domain and all its subdomains. This ensures that the cookie is not dispatched to other servers. Super cookies with domains such as `.com` are disallowed. 
-
-Note. It is not possible to set a cookie for domains that are two levels up, ie. if your worker runs from `my-worker.my-project.workers.dev`, you can only set `Domain=my-project.workers.dev`, if you try to set a cookie two levels up such as `Domain=workers.dev`, it will fail. This means that you can set cookies that affect the parent domain, sibling domains, and all subdomains therein, but not the super domains (`.com`) nor a grandparent domain (a domain two levels up). 
-
-5. `Path=/my/path` is a path that limits the scope of the cookie. It consists of directory components, separated by the symbol `/`. A cookie is included in requests whose URI starts with the corresponding path components. If no attribute is set, the path is taken from the request URI.
-
-## WhatIs: RememberMe or ForgetMe or Rolling cookies?
-
-> Session cookies are removed when the client shuts down.
->
-To make the browser either forget the session when the browser window closes, or remember the user's login even while the browser is shut down, use the `Max-age` attributes on `Set-Cookie`. The value of `Max-Age` is a TTL number in seconds after last `Set-Cookie` directive in a response.
-
-> `Expires` is an older alternative to `Max-Age`. It require a more complex Date UTC format value (`new Date().toUTCString()`), and is always overridden by `Max-Age` when both attributes are set.
-
-1. **ForgetMe cookies**, aka. **session cookies**, are delete by the browser every time the full browser window with that cookie is closed by the user (closing a tab in a window is not enough to forget a session cookie). To create a **forgetMe** cookie simply do NOT  set neither `Max-Age` nor `Expires` attributes on the cookie.
-
-```javascript
-async function handleRequest(req) {
-
-  const url = new URL(req.url);
-  const [ignore, action] = url.pathname.split("/")
-
-  if (action === "setCookie")
-    return new Response('hello cookie', {
-      status: 200, headers: {
-        'Set-Cookie': 'myCookie=hello sunshine; SameSite=Strict; Path=/;'
-      }
-    })
-
-  return new Response('<a href="setCookie">set cookie</a>', {
+function handleRequest(req) {
+  const cookie = rememberMeCookie('my-cookie', 'my-cookie-value', 'my.root.domain.com');
+  return new Response('hello cookie', {
     status: 200,
     headers: {
-      'Content-Type': 'text/html',
+      'set-cookie': cookie
     }
-  })
+  });
 }
-
-addEventListener('fetch', e => e.respondWith(handleRequest(e.request)));
 ```
 
-2. **RememberMe cookies**, aka **permanent cookies**, are saved by the browser even when the browser closes that browser window. The browser deletes the cookie when the `Max-Age` is reached. To create a **rememberMe** cookie, set a `Max-age` several days into the future, for example 1 day or 30 days. If the browser has already set a rememberMe cookie, do not set the cookie again.
+## Rolling cookie
 
-To prevent the user from having to enter his password every day (after the session ends), it is customary to remember that he is authorized in a cookie.
+The server cannot specify that the browser should delete the cookie when the session has been *inactive* for a certain period of time. This common usecase is therefore instead implemented server-side as a so-called "rolling cookie".
 
-Usually, cookies set for a certain period (for example, a month) or permanently. In the second case, the user will be logged in (i.e. he will be able to log in without entering his password) until he clicks the 'Logout' link or accesses the site from another browser.
+When implementing a rolling cookie, the server will:
+1. check the status of the current cookie, and
+2. if the current cookie is valid, send a new `set-cookie` header with the same cookie but with an updated `Max-Age`.
 
-How can this be implemented correctly? The principle is as follows: a random string should be written into the user's cookie and simultaneously into the database.
-- The first thing we do when entering the site is to check if the session is running. If it is running, the user is authorized. If it is not, then we look at the cookie and look there for a note about authorization.
- - If a cookie is marked, then we shall search the database for a user with such login and check whether a random string from the cookie matches a random string from the database for that user.
-- If it matches, we shall authorize it, i.e. start the session (the same procedure as for login and password authentication).
-- If there is no match, we shall show him the authorization form.
-- When authorising by login and password, we shall write a random line to the user in a cookie and a database. This shall be done only if the user has ticked the 'Remember me' box. Why? Because the user may not be at his computer and therefore does not want another person after him to be able to log in under his cookie login (i.e. without entering the password!).
-Therefore it is always worth giving the user a choice - he wants his browser to remember him in a cookie or not.
+To embellish the rolling cookie pattern, the server can associate an issue at time (`iat`) with the cookie. The `iat` would either be stored in the database in the Synchronizer patter, or be part of the encrypted data package with encrypted session id. However. This embelishment adds complexity and details to the rolling cookie. And, with encrypted cookies, replacing the encryption secret at specific intervals would accomplish the same as implementing rolling cookies. So, in this discussion, we leave the rolling cookie as a mechanism to create an infinite session as long as the user constantly keeps the session alive within the given *inactive time out* window. 
 
 ```javascript
-function getCookieValue(cookie, key) {
-  return cookie?.match(`(^|;)\\s*${key}\\s*=\\s*([^;]+)`)?.pop();
+//cookie forgotten when the browser is closed
+function forgetMeCookie(name, value, domain) {
+  return `${name}=${value}; domain=${domain}; path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=-1;`;
 }
 
-async function handleRequest(req) {
-  const url = new URL(req.url);
-  const [ignore, action, rememberMe] = url.pathname.split("/");
-  const maxAge = rememberMe ? 60 : 3 * 1;
-  if (action === "login")
-    return new Response("logged in " + (rememberMe ? " and remember" : ""), {
-      status: 200, headers: {
-        'Set-Cookie': `myCookie=hello sunshine; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}; `
-      }
-    })
-
-  return new Response(`<a href="login">login</a><br>
-  <label>Remember Me
-    <input type="checkbox">
-  </label>
-  <script>
-  document.querySelector("a").addEventListener("click", e=>{
-  e.preventDefault();
-   let input = document.querySelector('input');
-   let url = e.currentTarget.href;
-      if (input && input.checked)
-       url += '/rememberMe';
-   return window.location = url;    
-  })
-  </script>
-  `, {
-    status: 200, headers: {'Content-Type': 'text/html',}
-  })
+//cookie remembered for an hour (3600sec)
+//cookie remembered for a month (30days*24hrs*3600sec)
+//commonly, this is the same for all instances, and so the max-age can
+//be specified as part of the fixed string.
+function rememberMeCookie(name, value, domain) {
+  return `${name}=${value}; domain=${domain}; path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000`;
 }
 
-addEventListener('fetch', e => e.respondWith(handleRequest(e.request)));
-```
-   **RememberMe cookies** should not last infinitely. If a **RememberMe** cookie is set up to last for 365 days, then if it leaks, a leaked cookie might be valid for many months. To avoid such problems, **rolling cookies** can be used.   
-
-3. **Rolling cookies** is a particular type of RememberMe cookies. Rolling cookies create rolling sessions, a session whose TTL is automatically extended while the user is active. 
-
-   To create a **rolling cookie**, the server/worker sets a 'medium' `Max-age`: for example 4 hours (a long lunch break) or 10days (a short holiday). While the user remains active, this timeframe is continuously pushed into the future every time the browser interacts with the server. This is achieved by the cloudflare worker *always* sending the browser an update cookie with an updated `Max-Age` attribute. The cloudflare worker must keep track internally to for example only update Rolling Cookie upto a rolling cookie `Max-Age`. This functionality the cloudflare worker must implement itself, there is no support for it in the HTTP cookie standard. (It is of course possible to only update the session once for example it is halfway spent: for example only give a new 4 hour session once the current rolling session has less than 2hours left on the clock. Such a simple check can dramatically reduce the network overhead needed to extend the rolling cookie on each interaction).
-  >The idea is that a cookie value should store both the value of the last update and the cookie value separated by `.`. 
-
-```javascript
-function getCookieValue(cookie, key) {
-  return cookie ?.match(`(^|;)\\s*${key}\\s*=\\s*([^;]+)`) ?.pop();
+//remove cookie from browser
+function deleteCookie(name, domain) {
+  return `${name}=0; domain=${domain}; path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
-
-async function handleRequest(req) {
-  const url = new URL(req.url);
-  const [ignore, action] = url.pathname.split('/');
-  const maxAge = 60 * 1;
-  const cookies = req.headers.get('cookie');
-  const iatString = getCookieValue(cookies, 'iat');
-  const [iatDate, value] = iatString ?.split('.') || [];
-  const iat = new Date(parseInt(iatDate || Date.now()));
-    return new Response('rolling cookie: ' + iat.toUTCString(), {
-      status: 201,
-      headers: {
-        'Content-type': 'text/html',
-        'Set-Cookie': `iat=${Date.now() + '.' + 'roll'}; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge};`
-      }
-    });
+function handleRequest(req) {
+  const cookieIn = req.headers.get('cookie');
+  const myCookieValue = getCookieValue(cookieIn, 'myCookie');
+  const isValid = verifySession(myCookieValue);
+  const cookie = isValid ?
+    rememberMeCookie('my-cookie', 'my-cookie-value', 'my.root.domain.com'):
+    deleteCookie('my-cookie', 'my-cookie-value', 'my.root.domain.com');
+  return new Response('hello cookie', {
+    status: 200,
+    headers: {
+      'set-cookie': cookie
+    }
+  });
 }
-
-addEventListener('fetch', e => e.respondWith(handleRequest(e.request)));
 ```
 
-# HowTo: delete cookie
+The example above is very crude. For example, if no cookie is given in, then no cookie should be given out. 
 
-Just set the cookie on exactly the same name, path and domain, but with an `Expires` or `Max-Age` value in the past.  The server will be successful in removing the cookie only if the `Path` and the `Domain` attribute in the `Set-Cookie` header match the values used when the cookie added. Setting on exactly the same path is important. Many starters fail in this by using only the same name and domain and relying on the current request URL for the default path.
-
-```javascript
-        const myDomain = 'https://my-domain.workers.dev'
-        //add cookie
-        return new Response("cookie added", {
-            status: 201,
-            headers: {
-                'Set-Cookie': `myCookie=helloSunshine; Secure; HttpOnly; SameSite=Strict; Path=/; Domain=${myDomain}; Max-Age=${60*1};`
-            }
-        });
-        // delete cookie with the same path and domain attribute values
-        return new Response("cookie deleted", {
-            status: 201,
-            headers: {
-                'Set-Cookie': `myCookie=undefined; Secure; HttpOnly; SameSite=Strict; Path=/; Domain=${myDomain}; Max-Age=-1;`
-            }
-        });
-```
-
-## HowTo: send cookies using `fetch`
-
-The default value for `credentials` is `"same-origin"`. The default for `credentials` wasn't always the same, though. The following versions of browsers implemented an older version of the `fetch` specification where the default was `'omit'`:
-
- * Firefox 39-60
- * Chrome 42-67
- * Safari 10.1-11.1.2
-
-If you target these browsers, it's advisable to always specify `credentials: 'same-origin'` explicitly with all fetch requests instead of relying on the default:
-
-```javascript
-fetch('/users', {
-  credentials: 'same-origin'
-});
-```
-
-## Do user's logout?
-
-You can't rely on users logging out for security: others might come in and use their account when they leave the computer at the library. But, you need to provide users with an active choice of logging out of an app, so that they might switch between user accounts for example. And the default option is to have a session cookie, not save credentials on a strange machine.
-
-[good discussion](https://ux.stackexchange.com/questions/57132/do-users-log-out)
-
-### References 
+## References
 
 * [Sessions and Cookies](https://auth0.com/docs/sessions-and-cookies)
 * [MDN: Cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies)
@@ -278,3 +136,4 @@ You can't rely on users logging out for security: others might come in and use t
 * [Blog: "Just how many web users really disable cookies or JavaScript?"](https://blog.yell.com/2016/04/just-many-web-users-disable-cookies-javascript/)
 * [sending cookies using fetch](https://github.com/github/fetch#user-content-handling-http-error-statuses)
 * [default value of path or domain](https://stackoverflow.com/questions/43324480/how-does-a-browser-handle-cookie-with-no-path-and-no-domain#answer-43336097)
+* [stackoverflow: `max-age=-1` vs. `max-age=0`](https://stackoverflow.com/questions/15932957/difference-between-0-and-negative-value-for-setmaxage-for-cookie)

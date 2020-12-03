@@ -1,3 +1,13 @@
+
+//todo prior to any framework, this method must be blocked by calling .preventDefault() in the capture phase.
+
+//todo should echo much of the same functionality as the normal <form>.
+//todo the form produces a GET post that will be opened in a popup window.
+//todo have a fallback if popups are blocked. do we need to test if the ability is precent
+//   https://stackoverflow.com/questions/2914/how-can-i-detect-if-a-browser-is-blocking-a-popup
+//
+//todo accept only text inside the link <a href='link'>text-only</a>, for now.
+
 function ratechangeTick(cb) {
   var audio = document.createElement("audio");
   audio.onratechange = cb;

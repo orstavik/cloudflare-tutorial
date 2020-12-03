@@ -1,4 +1,4 @@
-# WhatIs: a SessionID cookie?
+# WhatIs: a SessionID?
 
 > Session: a set of interactions between f.x. a user and an application that take place within a given timeframe.
 
@@ -31,7 +31,8 @@ There are three properties for cookies that can be used to make them safe:
 
 `SameSite=strict` attaches the cookie *only* when the request is made from an html page and/or javascript that themselves are loaded from your server. This means that top-level navigation such as link clicks do not get your cookie. The downside of not adding cookie to top-level navigation is that you must have two roundtrips between server and browser: first you request the page without a cookie, and then your page will make a second request with the `strict` cookie to obtain the user data (for example as a json file).
 
-`SameSite=lax` attaches the cookie in the same situations as `SameSite=strict`, but it also attaches the cookie during top-level navigation. This means that the cookie is sent when the user clicks a link, and the server can fill the page with suitable content. However, this means that the `SameSite=lax` can also be triggered by other scripts in calls such as: 
+`SameSite=lax` attaches the cookie in the same situations as `SameSite=strict`, but it also attaches the cookie during top-level navigation. This means that the cookie is sent when the user clicks a link, and the server can fill the page with suitable content. However, this means that the `SameSite=lax` can also be triggered by other scripts in calls such as:
+
 ```javascript
 const hack = window.open('https://inn.ocent.com/?password=omg', "_blank"); 
 hack.close();
@@ -65,6 +66,16 @@ It is important that the server doesn't grant any extra `CORS` privileges to any
 > The key principle of `CORS` is that the blocking happens *after* the request is made. This means that if the server do not filter based on referer, then the server will perform the action requested and it is the browser that receives the data that chooses *NOT* to share its data with the js or html app.
 >
 > Why do it this way? It is a safety meassure implemented by the browser *after* the servers had made their resources wide open. It is ductape.  
+
+## WhatAbout: logout?
+
+For sessions that are terminated when the browser is closed, a logout button might seem redundant. But, if a `"remember me on this computer"` has caused the browser to persist the session state in for example a cookie, you need a logout function to actively remove this session state again. So, a logout button is both necessary and desired as part of protecting the user state.
+
+Logout is often also the mechanism for switching user. If you don't provide a "switch user button", then a "logout, then login" routine will complete the same usecase and should be a recognizable pattern for your users.
+
+However, users often forget to logout. Or believe (correctly or erroneously) that closing the browser window/tab will log them out. So you can't really rely on a logout button as a failsafe, fallback security mechanism. Always assume your users will log out incorrectly/forget to log out, and that another user might get access to their session.
+
+[good discussion](https://ux.stackexchange.com/questions/57132/do-users-log-out)
 
 ## Conclusion
 
