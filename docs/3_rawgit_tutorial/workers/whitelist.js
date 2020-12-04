@@ -1,6 +1,6 @@
-const CORS_WHITELIST = ['a.friend.com', 'a.partner.com'];
-const READ_WHITELIST = ['example.com'];
-const WRITE_WHITELIST = ['example.com'];
+const WHITELIST_CORS = ['a.friend.com', 'a.partner.com'];
+const WHITELIST_READ = ['example.com'];
+const WHITELIST_WRITE = ['example.com'];
 
 const emptyResult = ['', null];
 
@@ -15,12 +15,12 @@ function whitelist(refUrl, reqUrl, method) {
     return emptyResult;
   const refUrlHost = refUrl.host;
   if (refUrlHost === reqUrl.host)
-    return ['same-origin', refUrlHost];
-  if (method === 'POST' && WRITE_WHITELIST.indexOf(refUrlHost) >= 0)
-    return ['write', refUrlHost];
-  if (READ_WHITELIST.indexOf(refUrlHost) >= 0)
-    return ['read', refUrlHost];
-  if (CORS_WHITELIST.indexOf(refUrlHost) >= 0)
+    return ['same-origin write read cors', refUrlHost];
+  if (method === 'POST' && WHITELIST_WRITE.indexOf(refUrlHost) >= 0)
+    return ['write read cors', refUrlHost];
+  if (WHITELIST_READ.indexOf(refUrlHost) >= 0)
+    return ['read cors', refUrlHost];
+  if (WHITELIST_CORS.indexOf(refUrlHost) >= 0)
     return ['cors', refUrlHost];
   return emptyResult;
 }

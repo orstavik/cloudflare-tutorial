@@ -98,11 +98,11 @@ function whitelist(refUrl, reqUrl, method) {
     return emptyResult;
   const refUrlHost = refUrl.host;
   if (refUrlHost === reqUrl.host)
-    return ['same-origin', refUrlHost];
+    return ['same-origin write read cors', refUrlHost];
   if (method === 'POST' && WRITE_WHITELIST.indexOf(refUrlHost) >= 0)
-    return ['write', refUrlHost];
+    return ['write read cors', refUrlHost];
   if (READ_WHITELIST.indexOf(refUrlHost) >= 0)
-    return ['read', refUrlHost];
+    return ['read cors', refUrlHost];
   if (CORS_WHITELIST.indexOf(refUrlHost) >= 0)
     return ['cors', refUrlHost];
   return emptyResult;
