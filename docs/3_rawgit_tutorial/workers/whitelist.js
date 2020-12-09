@@ -1,40 +1,63 @@
-const WHITELIST_CORS = ['a.friend.com', 'a.partner.com'];
-const WHITELIST_READ = ['example.com'];
-const WHITELIST_WRITE = ['example.com'];
+//pure function import begins
 
-const emptyResult = ['', null];
-
-function whitelist(refUrl, reqUrl, method) {
-  if (method !== 'GET' && method !== 'POST')
-    return emptyResult;
-  if (!refUrl)
-    return emptyResult;
-  refUrl = new URL(refUrl);
-  reqUrl = new URL(reqUrl);
-  if (refUrl.protocol !== reqUrl.protocol)
-    return emptyResult;
-  const refUrlHost = refUrl.host;
-  if (refUrlHost === reqUrl.host)
-    return ['same-origin write read cors', refUrlHost];
-  if (method === 'POST' && WHITELIST_WRITE.indexOf(refUrlHost) >= 0)
-    return ['write read cors', refUrlHost];
-  if (WHITELIST_READ.indexOf(refUrlHost) >= 0)
-    return ['read cors', refUrlHost];
-  if (WHITELIST_CORS.indexOf(refUrlHost) >= 0)
-    return ['cors', refUrlHost];
-  return emptyResult;
+function prepAccessRights(rights, postRights) {
+  const GET = JSON.parse(rights);
+  const POST = JSON.parse(postRights);
+  for (let key in GET)
+    POST[key] = (POST[key] || []).concat(GET[key]);
+  return {GET, POST};
 }
+
+function httpsOriginOrEmptyString(url) {
+  if (!url)
+    return '';
+  url = new URL(url);
+  if (url.protocol !== 'https:')
+    return '';
+  return url.host;
+}
+
+function hostMatches(host, h) {
+  return h[0] === '^' && h[h.length - 1] === '$' ? host.match(h) : h === host;
+}
+
+function whitelistRefererHttpsGetPost(req, accessRights) {
+  const refHost = httpsOriginOrEmptyString(req.headers.get('referer'));
+  const access = Object.entries(accessRights[req.method])
+    .filter(([r, hosts]) => hosts.find(h => hostMatches(refHost, h)))
+    .map(([right]) => right)
+    .join(' ');
+  return [access, refHost];
+}
+
+//pure function import ends
+
+//global variables, f.. we need four f..ing backslashes to produce one backslash
+const ACCESS_RIGHTS = `{
+  "cookie": ["^([^.]+\\\\.){2}workers.dev$", "b.workers.dev"],
+  "cors": ["^(.*)$"],
+  "read": ["a.b.workers.dev"]
+}`;
+const POST_ONLY_ACCESS_RIGHTS = `{
+  "read": ["^(.*)$"],
+  "write": ["^([^.]+\\\\.){2}workers.dev$"]
+}`;
+const methodPrivilegeHost = prepAccessRights(ACCESS_RIGHTS, POST_ONLY_ACCESS_RIGHTS);
+
+//the global variables come in as json strings, and must be converted into a 
+
+const links = `<a href='whitelist.intertext-no.workers.dev'>get</a>
+<form method='post' action='whitelist.intertext-no.workers.dev'><input type=submit value=post />`;
 
 function handleRequest(req) {
-  const referer = req.headers.get('referer');
-  const [privies, refHost] = whitelist(referer, req.url, req.method);
+  const [access, refHost] = whitelistRefererHttpsGetPost(req, methodPrivilegeHost);
 
+  //if cors is added as privilege, then add referer host to cors header.
   const headers = {'content-type': 'text/html'};
-  if (privies)
-    headers['access-control-allow-origin'] = refHost;
+  if (access.indexOf('cors') >= 0)
+    headers['access-control-allow-origin'] = 'https://' + refHost;
 
-  const result = `You requested: from ${referer} with ${req.method} which gives you ${privies || 'no'} privileges.`;
-  return new Response(result, {status: 200, headers});
+  return new Response(`${req.method} request from ${refHost} has privileges: ${access || 'none'}. ${links}`, {headers});
 }
 
-addEventListener('fetch', e=>e.respondWith(handleRequest(e.request)));
+addEventListener('fetch', e => e.respondWith(handleRequest(e.request)));

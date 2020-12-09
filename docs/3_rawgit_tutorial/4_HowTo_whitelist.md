@@ -1,200 +1,215 @@
 # HowTo: whitelist?
 
-## WhatIs: a whitelist?
+## What: access privileges?
 
-A **whitelist** is a list of hosts whose HTTP requests *may* be granted privileges to:
+> Baseline today is to *only* grant access privileges to HTTPS requests. In this tutorial, we extend this principle to make an API only grant access to other resources that themselves are loaded over HTTPS. If you need to allow access to other resources coming from HTTP, then you must loosen this restriction. Here, we assume the world is only HTTPS, and that unsecure HTTP no longer exists.
 
-1. **CORS**: **use public resources** such as images and scripts in a browser,
+In a web app, the most common access privileges that are granted to HTTPS requests are:
+
+1. **CORS**: **use public resources** such as images and scripts in an html-page or script from another origin,
 2. **READ**: **read private resources** such as user data, and
 3. **WRITE**: **change the state of private resources** such as add/remove user data.
 
-Commonly, if a host is granted WRITE access to a data resource, that host also has READ access to the same resources. Similarly, if a host is granted READ access to a data resource, that host also has CORS access to use the same resources in a browser. Thus, commonly, the whitelists form a simple hierarchy where hosts are given wider and wider access.
+Access privileges are often misunderstood as *universal and hierarchical*:
 
-Some apps control several resources: for example, a server-side app might control access to two different databases, or a database and a set of scripts. Such an app might need several, overlapping whitelists: whitelist A grants READ access only to database A; whitelist A2 grants READ access only to that registered users own data in database A; whitelist AB grants READ access to database A and B, and write access to database B. In such instances, *make several parallell whitelists*. The whitelist are supposed to declare and highlight the logic of protection in your app/API/data set.
+1. **universal**: all apps basically only need three categories of privileges (READ, WRITE, and CORS/EXECUTE).
+2. **hierarchical**: if a request can WRITE, then that request can also READ; and if a request can READ, then that request can also use resources CORS.
 
-Advice: If you can, avoid managing several data sources with different whitelists in the same app.
+Sure, sometimes these assumptions are true: some apps only need to distinguish between cors/read/write, and these privileges form a neat hierarchy (write(read(cors))).
 
-## WhatTo: whitelist?
+But. Often, these assumptions are false. Some requests are only privy to read *a particular user's data*, while another request is privy to read *every user's data*. Other requests might only be privy to *write and read* to a particular user's data, but is *not* privy to read any data associated with other users. So, even though read, write, and cors privileges resemble each other across apps, there are devils in the details.
 
-Web browsers making requests to web servers automatically populate a `referer` header in the request. The `referer` header is the host from where the script or html page that triggered the request was loaded from.
+Some apps control several resources: for example, a server-side app might control access to two or more different databases, static scripts, and/or computing resources. Such an app might need several, overlapping whitelists: whitelist A grants READ access only to database A; whitelist A2 grants READ access only to a subsegment in database A; whitelist AB grants READ access to database A and B, and write access to database B.
 
-The `referer` header can be trusted, in the sense that a modern browser that has not been compromised by a bad extension or hacked, will never allow a script, a user, or another web page to make an HTTP request with an altered `referer` value.
+Instead of viewing *access rights as universal and hierarchical* concepts, it is better to view **access rights as app semantics**. Access rights are simple labels. A request might get `full-user` access, that converts into something like read, write, and execute privileges to a particular user's entries in a database; another request might get `read-only` access, ie. it might read data for all users, but only from within the same site and it can never *change any state* on the server. The access rights labels reflect idiosyncratic app particulars - they are not universal Socratic ideals/categories.
 
-However, the `referer` header can often be `null`. And more and more, the `referer` header only includes the `host` of the referer.
+## WhatIs: a whitelist?
 
-However, if you make an API, you can specify that any request to your API must include a `referer` with information about the `host`. This essentially stipulate that users of your API must use `POST` requests and allow the `referer` to be included:
+**Whitelisting** is to:
+
+1. restrict *all* access by default, and then
+2. grant access rights one by one,
+3. based on the properties of:
+	1. the triggering event (such as an HTTP request) and
+	2. the state of the program itself.
+
+**Blacklisting** is the reverse process. Here, (all) privileges are granted by default, and then the triggering event and state of the program is reviewed to limit access.
+
+In general, whitelisting is safer than blacklisting. If either a) a triggering event with unforeseen properties or b) something unforeseen happens when the state of the event or the app is checked, then whitelisting should fall back to a "no-access" default. During blacklisting such unforeseen events is much more likely to erroneously leave access rights in limbo.
+
+## HowTo: whitelist HTTPS requests?
+
+At minimum, we check four properties of the HTTPS request during whitelisting:
+
+1. `referer`
+2. `method`
+3. access tokens (such as a `cookie` or `Token` containing a session and/or user id)
+4. the requested action identified by `pathname`,`searchParams`, and/or `body`
+
+The whitelisting is done as part of the following logic in the server-side app:
+
+1. First the requested action is identified by reviewing the `pathname`,`searchParams`, and/or `body`. If there is no requirement for any access privileges or session specific data, then the requested action is simply performed.
+
+2. Then the "list of rights" is calculated using the `referer` and the `method` only. If the action only requires being vetted based on this "list or rights", then the requested action is executed.
+
+3. Finally, the session token is validated and matched with the "list of rights" and the requested action. The server side app now has all potential data at its disposal.
+
+In this tutorial we only describe how to whitelist and convert the `referer` and the `method` into a "list of rights".
+
+
+## HowTo: declare a whitelist?
+
+In the settings of the app, we declare two JSON strings:
+1. access rights (for both `GET` and `POST`)
+2. access rights for `POST` only requests
+
+Each table of access rights maps a **privilege** to a **list of hosts**. A **host** can be either a string or a regex string starting with `^` and ending with `$`.
+
+When the server application starts, the map with access rights is prepped:
+1. the JSON strings are converted into dictionary objects,
+2. and then these objects are sorted under `GET` and `POST` in a ready to use, complete method-to-privilege-to-host map (`methodPrivilegeHost`).
 
 ```javascript
-const someResource = await fetch('https://your.api/some/resource',
-  {
-    method: 'POST',
-    refererPolicy: 'strict-origin-when-cross-origin'
+function prepAccessRights(rights, postRights) {
+  const GET = JSON.parse(rights);
+  const POST = JSON.parse(postRights);
+  for (let key in GET)
+    POST[key] = (POST[key] || []).concat(GET[key]);
+  return {GET, POST};
+}
+
+//global variables, Leaning toothpicks (4 \\\\ becomes 1 \ in the final regex.
+const ACCESS_RIGHTS = `{
+"cookie": ["^([^.]+\\\\.){2}workers.dev$", "b.workers.dev"],
+"cors": ["^(.*)$"],
+"read": ["a.b.workers.dev"]
+}`;
+const POST_ONLY_ACCESS_RIGHTS = `{
+"read": ["^(.*)$"],
+"write": ["^([^.]+\\\\.){2}workers.dev$"]
+}`;
+const methodPrivilegeHost = prepAccessRights(ACCESS_RIGHTS, POST_ONLY_ACCESS_RIGHTS);
+```
+
+The resulting `methodPrivilegeHost` in the above example will look like this:
+
+```javascript
+const methodPrivilegeHost = {
+  GET: {
+    cookie: ["^([^.]+\\.){2}workers.dev$", "b.workers.dev"],
+    cors: ["^(.*)$"],
+    read: ["a.b.workers.dev"]
+  },
+  POST: {
+    cookie: ["^([^.]+\\.){2}workers.dev$", "b.workers.dev"],
+    cors: ["^(.*)$"],
+    read: ["^(.*)$", "a.b.workers.dev"],
+    write: ["^([^.]+\\.){2}workers.dev$"] 
   }
-);
+}
 ```
 
-## WhatDo: CORS do?
+Att! Regex in strings require backslashes to be doubled. Backslashes in json strings also need to be doubled. Thus, to write **1 \\** regex backslash in json'ed regex strings, you need **4 \\\\\\\\**.  
 
-But. Some of your resources are not accessed by nice `POST` requests with an even nicer `referer` header. The web is webby (a web page might contain references to scripts and images to different servers), and these requests are made using `GET` requests that has a `referer=null` header.
+## HowTo: match `referer` and `method` with `methodPrivilegeHost` 
 
-And another but. Your browser still would like to respond to such queries. The web page that sends the not so nice `GET` request with the missing `referer`, might still be supposed to use the resource (the host might still be in your CORS whitelist). Furthermore, even though the browser *do not* send the `referer` with the `GET` request, the browser might still include a nice, safe, secret, httpOnly cookie with the request. If you only could verify the `referer` at the same time, then you would happily give that request READ access to private user data.
-
-The solution here is CORS. CORS enable your server to *outsource* the job of verifying the `referer` to the browser *after* the browser receives the private data. Your server can trust the browser that delivers the cookie. And the browser has all the information needed: the browser knows the missing `referer` in the `GET` header (the browser didn't send that information with the `GET` request only to protect the privacy of your user, it has it no problem), and the browser can read the headers of your server's response to see if that `referer` should have access to read data coming from your server. So, if your server does *not* add an `access-control-allow-origin` header that gives the hidden `referer` access to your resource, then the browser can block that data from being shown.
-
-CORS is very strange security mechanism for sure. CORS blocks sensitive data *after* it has left the server inside the browser. This means that CORS gives some protection for READing data, but NO protection for illicit WRITing. So, in essence, CORS can be used to protect reading of non-super-sensitive user data, iff that request also contains a trustworthy cookie.
-
-## HowTo: `whitelistReferer(request, accessRights)`?
-
-Server-side, we only accept `https` requests and ignore `port` settings. We check both the `referer` and the `method` in an HTTP request against a access rights map.
+The `whitelistRefererHttpsGetPost(req, accessRights)` returns both the `access` "list of rights" and the `refHost` (referer host). The `refHost` is needed outside the whitelist function too when CORS privileges are granted. The input to this pure function is the `request` and the `methodPrivilegeHost` map.
 
 ```javascript
-function whitelistRefererHttpsGetPost(req, accessRights) {
-  //1. check method
-  if (req.method !== 'GET' && req.method !== 'POST')
-    return ['', undefined];
-
-  //2. check for empty referer and referer protocol
-  const referer = req.headers.get('referer');
-  if (!referer)
-    return ['', undefined];
-  const refUrl = new URL(referer);
-  if (refUrl.protocol !== 'https')
-    return ['', undefined];
-
-  //3. getAccess per domain
-  let access = accessRights[refUrl.host] || '';
-  if (req.method === 'GET')
-    access = access.replace(/[A-Z]/g, '');
-  return [access.toLowerCase(), refUrl.host];
+function hostMatches(host, h) {
+  return h[0] === '^' && h[h.length - 1] === '$' ? host.match(h) : h === host;
 }
 
-const accessRights = {
-  'example.com': 'cors read WRITE',
-  'partner.com': 'cors read',
-  'another.com': 'cors'
+function httpsOriginOrEmptyString(url) {
+  if (!url)
+    return '';
+  url = new URL(url);
+  if (url.protocol !== 'https:')
+    return '';
+  return url.host;
 }
 
-whitelistRefererHttpsGetPost(incomingRequest, accessRights);
+function whitelistRefererHttpsGetPost(request, methodPrivilegeHost) {
+  const refHost = httpsOriginOrEmptyString(request.headers.get('referer'));
+  const listOfRights = Object.entries(methodPrivilegeHost[request.method])
+    .filter(([r, hosts]) => hosts.find(h => hostMatches(refHost, h)))
+    .map(([right]) => right)
+    .join(' ');
+  return [listOfRights, refHost];
+}
 ```
 
-Attention:
+Att! In this tutorial, we ignore `port` and treat all non `https` origins as if they were null. 
 
-1. The **app specifies the semantics of the access rights**. Names such as `read`, `cors`, `write`, `write-user-data-only`, `cors-css-only`, etc. are defined by the app.
-2. **lowercase** access rights can be accessed from **`GET` requests**. All uppercase access rights will be stripped if the request is *not* a `POST` request.
-3. By changing the uppercase/lowercase letters in the accessRights map, `POST`/`GET` restrictions can be tightened/loosened differently in different apps.
-
-`whitelistRefererHttpsGetPost(request, accessRights)` is a pure function which:
-
-* input is the request and an access rights map (domain=> space separated string of access rights), and
-* output both a) a string of space separated access rights and b) the referer host.
-
-The `whitelistRefererHttpsGetPost(incomingRequest, accessRights)` is a pure function that can be reused across different apps.
-
-The access rights map is an object that maps the different access rights per domain name.
-
-## HowTo: regex `whitelistRefererHttpsGetPost(...)`?
+## WhyAndHow: regex?
 
 Often, you wish to grant *some* access-rights to *all* hosts, and/or *all* access-rights to a still indefinite group of (sub-)domains. For example, an app might wish to give everyone `cors` access, while only a specific domain and its immediate subdomains write access.
 
 To accomplish dynamic host attributes, we use regex. Any string that begins with `^` and ends with `$` is treated as regex. The `^...$` format *both* has the benefit of making the string invalid as a regular domain, *and* ensuring that the entire referer host is evaluated, thus reducing risks for clever domain-name-hacks.
 
-Att!! Remember **double \\**!!
-
-```javascript
-function convertAccessRights(dict) {
-  return dict.entries().map(([k, v]) => [k.startsWith('^') && k.endsWith('$') ? new RegExp(k) : k, v]);
-}
-
-function whitelistRefererHttpsGetPost(req, accessRights) {
-  //1. check method
-  if (req.method !== 'GET' && req.method !== 'POST')
-    return ['', undefined];
-
-  //2. check for empty referer and referer protocol
-  const referer = req.headers.get('referer');
-  if (!referer)
-    return ['', undefined];
-  const refUrl = new URL(referer);
-  if (refUrl.protocol !== 'https')
-    return ['', undefined];
-
-  //3. get all matching access rights for referer domain
-  const matchingRights = '';
-  for (let [h, rights] of accessRights) {
-    if(h instanceof RegExp ? h.match(refUrl.host) : h === refUrl.host)
-      matchingRights += rights + ' ';
-  }
-  let access = new Set(matchingRights.split(' ')).toArray().join(' ');
-  //3b. filter out uppercase letters in GET requests.
-  if (req.method === 'GET')
-    access = access.replace(/[A-Z]/g, '');
-  return [access.toLowerCase(), refUrl.host];
-}
-
-const accessRights = {
-  //root domain or direct subdomain can read and cors, and WRITE from POST requests 
-  '^([^.]*\\.)?example.com$': 'cors read WRITE',
-  //all domains get cors
-  '^.*$': 'cors'
-}
-
-const preppedAccessRights = convertAccessRights(accessRights);
-whitelistRefererHttpsGetPost(incomingRequest, preppedAccessRights);
-```
-
 ## Demo: Show me your papers!
 
 ```javascript
 //pure function import begins
-function convertAccessRights(dict) {
-  return dict.entries().map(([k, v]) => [k.startsWith('^') && k.endsWith('$') ? new RegExp(k) : k, v]);
+
+function prepAccessRights(rights, postRights) {
+  const GET = JSON.parse(rights);
+  const POST = JSON.parse(postRights);
+  for (let key in GET)
+    POST[key] = (POST[key] || []).concat(GET[key]);
+  return {GET, POST};
+}
+
+function httpsOriginOrEmptyString(url) {
+  if (!url)
+    return '';
+  url = new URL(url);
+  if (url.protocol !== 'https:')
+    return '';
+  return url.host;
+}
+
+function hostMatches(host, h) {
+  return h[0] === '^' && h[h.length - 1] === '$' ? host.match(h) : h === host;
 }
 
 function whitelistRefererHttpsGetPost(req, accessRights) {
-  //1. check method
-  if (req.method !== 'GET' && req.method !== 'POST')
-    return ['', undefined];
-
-  //2. check for empty referer and referer protocol
-  const referer = req.headers.get('referer');
-  if (!referer)
-    return ['', undefined];
-  const refUrl = new URL(referer);
-  if (refUrl.protocol !== 'https')
-    return ['', undefined];
-
-  //3. get all matching access rights for referer domain
-  const matchingRights = '';
-  for (let [h, rights] of accessRights) {
-    if(h instanceof RegExp ? h.match(refUrl.host) : h === refUrl.host)
-      matchingRights += rights + ' ';
-  }
-  let access = new Set(matchingRights.split(' ')).toArray().join(' ');
-  //3b. filter out uppercase letters in GET requests.
-  if (req.method === 'GET')
-    access = access.replace(/[A-Z]/g, '');
-  return [access.toLowerCase(), refUrl.host];
+  const refHost = httpsOriginOrEmptyString(req.headers.get('referer'));
+  const access = Object.entries(accessRights[req.method])
+    .filter(([r, hosts]) => hosts.find(h => hostMatches(refHost, h)))
+    .map(([right]) => right)
+    .join(' ');
+  return [access, refHost];
 }
+
 //pure function import ends
 
-//global variable
-const accessRights = {
-  '^([^.]*\\.)?example.com$': 'read WRITE',
-  '^.*$': 'cors READ'
-}
+//global variables, f.. we need four f..ing backslashes to produce one backslash
+const ACCESS_RIGHTS = `{
+  "cookie": ["^([^.]+\\\\.){2}workers.dev$", "b.workers.dev"],
+  "cors": ["^(.*)$"],
+  "read": ["a.b.workers.dev"]
+}`;
+const POST_ONLY_ACCESS_RIGHTS = `{
+  "read": ["^(.*)$"],
+  "write": ["^([^.]+\\\\.){2}workers.dev$"]
+}`;
+const methodPrivilegeHost = prepAccessRights(ACCESS_RIGHTS, POST_ONLY_ACCESS_RIGHTS);
 
-const accessRights2 = convertAccessRights(accessRights); 
+//the global variables come in as json strings, and must be converted into a 
+
+const links = `<a href='whitelist.intertext-no.workers.dev'>get</a>
+<form method='post' action='whitelist.intertext-no.workers.dev'><input type=submit value=post />`;
 
 function handleRequest(req) {
-  const [privies, refHost] = whitelistRefererHttpsGetPost(req, accessRights2);
+  const [access, refHost] = whitelistRefererHttpsGetPost(req, methodPrivilegeHost);
 
   //if cors is added as privilege, then add referer host to cors header.
   const headers = {'content-type': 'text/html'};
-  if (privies && privies.indexOf('cors') !== -1)
-    headers['access-control-allow-origin'] = refHost;
+  if (access.indexOf('cors') >= 0)
+    headers['access-control-allow-origin'] = 'https://' + refHost;
 
-  const result = `You requested: from ${refHost} with ${req.method} which gives you ${privies || 'no'} privileges.`;
-  return new Response(result, {status: 200, headers});
+  return new Response(`${req.method} request from ${refHost} has privileges: ${access || 'none'}. ${links}`, {headers});
 }
 
 addEventListener('fetch', e => e.respondWith(handleRequest(e.request)));
@@ -202,4 +217,4 @@ addEventListener('fetch', e => e.respondWith(handleRequest(e.request)));
 
 ## References
 
- * 
+* [The CORS of history](https://en.wikipedia.org/wiki/Same-origin_policy#History)

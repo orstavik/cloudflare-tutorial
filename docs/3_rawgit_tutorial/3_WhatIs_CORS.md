@@ -71,18 +71,17 @@ And this gives you the following eye-of-the-needle in which to filter your HTTPS
 5. Thus, CORS will protect data from being *read and used* by unknown third parties.
 6. But, your server should *only* do state changes (write operations) based on HTTPS `POST` requests. 
 
-
-SOP works by blocking such requests in the browser **on the receving end**. Ie. SOP will *allow* a third party script or web page to *make and send* for example a GET request to your server, which can often also include any cookie you have associated with your domain/location. But, when the browser receives the result from your server, it will block the other web page/script from *using* that image or *reading* that json file.
-
-
-First, your server should anticipate that third party scripts can send it requests. Second, your server should anticipate that  that a) contain the server's own `cookie` (or a `cookie` that looks like the server's own cookie. This applies both to `GET` and `POST` requests, **anybody can send an HTTP request to your server from a third party script in a trusted browser**.
-
 ## References
 
  * [The CORS of history](https://en.wikipedia.org/wiki/Same-origin_policy#History)
 
 
 ## old drafts
+
+SOP works by blocking such requests in the browser **on the receving end**. Ie. SOP will *allow* a third party script or web page to *make and send* for example a GET request to your server, which can often also include any cookie you have associated with your domain/location. But, when the browser receives the result from your server, it will block the other web page/script from *using* that image or *reading* that json file.
+
+
+First, your server should anticipate that third party scripts can send it requests. Second, your server should anticipate that  that a) contain the server's own `cookie` (or a `cookie` that looks like the server's own cookie. This applies both to `GET` and `POST` requests, **anybody can send an HTTP request to your server from a third party script in a trusted browser**.
 
 Why? The key to understanding SOP, is that your server can attach a special CORS header (`Access-Control-Allow-Origin`) to your image or json file. This CORS header can explicitly tell Firefox, Chrome, and/or Safari that they *can* indeed share that resource with the third party script/web page. The browser does not know in advance if your server will allow scripts from other servers to use its images and/or read its json files. Therefore, the browser lets the cross origin script/web page make the request to your server, receives the result, and then based on the CORS permissions granted by your server hides it or passes it on to the third party script/web page that requested it.
 
