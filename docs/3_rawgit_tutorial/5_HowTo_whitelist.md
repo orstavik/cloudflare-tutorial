@@ -59,45 +59,54 @@ In this tutorial we only describe how to whitelist and convert the `referer` and
 
 ## HowTo: declare a whitelist?
 
-In the settings of the app, we declare two JSON strings:
-1. access rights (for both `GET` and `POST`)
-2. access rights for `POST` only requests
+In the settings of the app, we declare a JSON map with `GET_POST` and `POST` access rights. Each is a table of access rights that maps a **privilege** to a **list of hosts**. A **host** can be either a string or a regex string starting with `^` and ending with `$`.
 
-Each table of access rights maps a **privilege** to a **list of hosts**. A **host** can be either a string or a regex string starting with `^` and ending with `$`.
-
-When the server application starts, the map with access rights is prepped:
-1. the JSON strings are converted into dictionary objects,
-2. and then these objects are sorted under `GET` and `POST` in a ready to use, complete method-to-privilege-to-host map (`methodPrivilegeHost`).
+When the server application starts, the map is converted into a dictionary object with access rights for`GET` and `POST` respectively. `POST` is the merged result of `GET_POST` and `POST`, while `GET` is only the `GET_POST` map.
 
 ```javascript
-function prepAccessRights(rights, postRights) {
-  const GET = JSON.parse(rights);
-  const POST = JSON.parse(postRights);
-  for (let key in GET)
-    POST[key] = (POST[key] || []).concat(GET[key]);
-  return {GET, POST};
+//pure functions
+function extractProp(rights, method) {
+  return Object.entries(rights).filter(([k, v]) => k.indexOf(method) >= 0).map(([k, v]) => v).reduce((acc, cur) => {
+    if (!acc)
+      return cur;
+    for (let key in cur)
+      acc[key] = (acc[key] || []).concat(cur[key]);
+    return acc;
+  }, {});
 }
 
-//global variables, Leaning toothpicks (4 \\\\ becomes 1 \ in the final regex.
-const ACCESS_RIGHTS = `{
-"cookie": ["^([^.]+\\\\.){2}workers.dev$", "b.workers.dev"],
-"cors": ["^(.*)$"],
-"read": ["a.b.workers.dev"]
+function prepAccessRights(accessRightsSettings) {
+  const rights = JSON.parse(accessRightsSettings);
+  return {
+    GET: extractProp(rights, 'GET'),
+    POST: extractProp(rights, 'POST')
+  };
+}
+//pure functions ends
+
+//global variables, leaning toothpicks 4
+const ACCESS_RIGHTS_SETTINGS = `{
+  "POST": {
+    "read": ["^(.*)$"],
+    "write": ["^([^.]+\\\\.){2}workers.dev$"]
+  },
+  "GET_POST" : {
+    "cookie": ["^([^.]+\\\\.){2}workers.dev$", "b.workers.dev"],
+    "cors": ["^(.*)$"],
+    "read": ["a.b.workers.dev", "whitelist.intertext-no.workers.dev"]
+  }
 }`;
-const POST_ONLY_ACCESS_RIGHTS = `{
-"read": ["^(.*)$"],
-"write": ["^([^.]+\\\\.){2}workers.dev$"]
-}`;
-const methodPrivilegeHost = prepAccessRights(ACCESS_RIGHTS, POST_ONLY_ACCESS_RIGHTS);
+
+const ACCESS_RIGHTS = prepAccessRights(ACCESS_RIGHTS_SETTINGS);
 ```
 
-The resulting `methodPrivilegeHost` in the above example will look like this:
+The resulting `ACCESS_RIGHTS` in the above example will look like this:
 
 ```javascript
-const methodPrivilegeHost = {
+const ACCESS_RIGHTS = {
   GET: {
     cookie: ["^([^.]+\\.){2}workers.dev$", "b.workers.dev"],
-    cors: ["^(.*)$"],
+    cors: ["^(.*)$"],         
     read: ["a.b.workers.dev"]
   },
   POST: {
@@ -111,31 +120,18 @@ const methodPrivilegeHost = {
 
 Att! Regex in strings require backslashes to be doubled. Backslashes in json strings also need to be doubled. Thus, to write **1 \\** regex backslash in json'ed regex strings, you need **4 \\\\\\\\**.  
 
-## HowTo: match `referer` and `method` with `methodPrivilegeHost` 
+## HowTo: match `referer` and `method` with `ACCESS_RIGHTS` 
 
-The `whitelistRefererHttpsGetPost(req, accessRights)` returns both the `access` "list of rights" and the `refHost` (referer host). The `refHost` is needed outside the whitelist function too when CORS privileges are granted. The input to this pure function is the `request` and the `methodPrivilegeHost` map.
+The `whitelistRefererHttpsGetPost(req, accessRights)` returns both the `access` "list of rights" and the `refHost` (referer host). The `refHost` is needed outside the whitelist function too when CORS privileges are granted. The input to this pure function is the `request` and the `ACCESS_RIGHTS` map.
 
 ```javascript
-function hostMatches(host, h) {
-  return h[0] === '^' && h[h.length - 1] === '$' ? host.match(h) : h === host;
-}
-
-function httpsOriginOrEmptyString(url) {
-  if (!url)
-    return '';
-  url = new URL(url);
-  if (url.protocol !== 'https:')
-    return '';
-  return url.host;
-}
-
-function whitelistRefererHttpsGetPost(request, methodPrivilegeHost) {
-  const refHost = httpsOriginOrEmptyString(request.headers.get('referer'));
-  const listOfRights = Object.entries(methodPrivilegeHost[request.method])
-    .filter(([r, hosts]) => hosts.find(h => hostMatches(refHost, h)))
-    .map(([right]) => right)
-    .join(' ');
-  return [listOfRights, refHost];
+function whitelistRefererGetPostHttps(req, accessRights) {
+  let url = req.headers.get('referer');
+  const refHost = url && (url = new URL(url)).protocol === 'https:' ? url.host : '';
+  const rights = Object.entries(accessRights[req.method])
+    .filter(([right, hosts]) => hosts.find(h => h[0] === '^' && h[h.length - 1] === '$' ? refHost.match(h) : h === refHost))
+    .map(([right]) => right);
+  return [rights, refHost];
 }
 ```
 
@@ -152,61 +148,59 @@ To accomplish dynamic host attributes, we use regex. Any string that begins with
 ```javascript
 //pure function import begins
 
-function prepAccessRights(rights, postRights) {
-  const GET = JSON.parse(rights);
-  const POST = JSON.parse(postRights);
-  for (let key in GET)
-    POST[key] = (POST[key] || []).concat(GET[key]);
-  return {GET, POST};
+function extractProp(rights, method) {
+  return Object.entries(rights).filter(([k, v]) => k.indexOf(method) >= 0).map(([k, v]) => v).reduce((acc, cur) => {
+    if (!acc)
+      return cur;
+    for (let key in cur)
+      acc[key] = (acc[key] || []).concat(cur[key]);
+    return acc;
+  }, {});
 }
 
-function httpsOriginOrEmptyString(url) {
-  if (!url)
-    return '';
-  url = new URL(url);
-  if (url.protocol !== 'https:')
-    return '';
-  return url.host;
+function prepAccessRights(accessRightsSettings) {
+  const rights = JSON.parse(accessRightsSettings);
+  return {
+    GET: extractProp(rights, 'GET'),
+    POST: extractProp(rights, 'POST')
+  };
 }
 
-function hostMatches(host, h) {
-  return h[0] === '^' && h[h.length - 1] === '$' ? host.match(h) : h === host;
-}
-
-function whitelistRefererHttpsGetPost(req, accessRights) {
-  const refHost = httpsOriginOrEmptyString(req.headers.get('referer'));
-  const access = Object.entries(accessRights[req.method])
-    .filter(([r, hosts]) => hosts.find(h => hostMatches(refHost, h)))
-    .map(([right]) => right)
-    .join(' ');
-  return [access, refHost];
+function whitelistRefererGetPostHttps(req, accessRights) {
+  let url = req.headers.get('referer');
+  const refHost = url && (url = new URL(url)).protocol === 'https:' ? url.host : '';
+  const rights = Object.entries(accessRights[req.method])
+    .filter(([right, hosts]) => hosts.find(h => h[0] === '^' && h[h.length - 1] === '$' ? refHost.match(h) : h === refHost))
+    .map(([right]) => right);
+  return [rights, refHost];
 }
 
 //pure function import ends
 
-//global variables, f.. we need four f..ing backslashes to produce one backslash
-const ACCESS_RIGHTS = `{
-  "cookie": ["^([^.]+\\\\.){2}workers.dev$", "b.workers.dev"],
-  "cors": ["^(.*)$"],
-  "read": ["a.b.workers.dev"]
+//global variables, leaning toothpicks 4
+const ACCESS_RIGHTS_SETTINGS = `{
+  "POST": {
+    "read": ["^(.*)$"],
+    "write": ["^([^.]+\\\\.){2}workers.dev$"]
+  },
+  "GET_POST" : {
+    "cookie": ["^([^.]+\\\\.){2}workers.dev$", "b.workers.dev"],
+    "cors": ["^(.*)$"],
+    "read": ["a.b.workers.dev", "whitelist.intertext-no.workers.dev"]
+  }
 }`;
-const POST_ONLY_ACCESS_RIGHTS = `{
-  "read": ["^(.*)$"],
-  "write": ["^([^.]+\\\\.){2}workers.dev$"]
-}`;
-const methodPrivilegeHost = prepAccessRights(ACCESS_RIGHTS, POST_ONLY_ACCESS_RIGHTS);
 
-//the global variables come in as json strings, and must be converted into a 
+const ACCESS_RIGHTS = prepAccessRights(ACCESS_RIGHTS_SETTINGS);
 
 const links = `<a href='whitelist.intertext-no.workers.dev'>get</a>
-<form method='post' action='whitelist.intertext-no.workers.dev'><input type=submit value=post />`;
+<form method='post' action='whitelist.intertext-no.workers.dev'><input type=submit value=post /></form>`;
 
 function handleRequest(req) {
-  const [access, refHost] = whitelistRefererHttpsGetPost(req, methodPrivilegeHost);
+  const [access, refHost] = whitelistRefererGetPostHttps(req, ACCESS_RIGHTS);
 
   //if cors is added as privilege, then add referer host to cors header.
   const headers = {'content-type': 'text/html'};
-  if (access.indexOf('cors') >= 0)
+  if (access.indexOf('cors') >= 0 && refHost)
     headers['access-control-allow-origin'] = 'https://' + refHost;
 
   return new Response(`${req.method} request from ${refHost} has privileges: ${access || 'none'}. ${links}`, {headers});
