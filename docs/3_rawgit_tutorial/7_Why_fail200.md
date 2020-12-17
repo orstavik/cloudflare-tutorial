@@ -1,4 +1,4 @@
-# HowTo: Fail?
+# Why: fail `200`?
 
 This article argues for using `status: 200` code for both `errors` and `sucess`, ie. not use `status: 404`. Why? 
 
