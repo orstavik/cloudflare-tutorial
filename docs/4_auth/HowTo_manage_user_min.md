@@ -11,7 +11,7 @@ fedIDb: appID2
 fedIDc: appID3
 ```
 4. Whenever a repeat user logs in, use `fedID` to retrieve the `appID` (`USERS_KV.get(fedId) =>  newAppID`). 
-5. Store the `appID` as the userID in the session object. The `appID` is thus the only thing you need to know inside the system, while the `fedID` is only needed during authentication. 
+5. Store the `appID` as the userID in the session object. In the session object, also add identifying information such as `john.doe@gmail.com` or `github.com/johnDoe`. The reason for this personal information is only so that the user can identify himself which of his many virtual identities he is using to log in currently. The `appID` is the only thing the rest of your system needs to know about the owner of the session, while the `fedID` is only needed during authentication. 
 
 ## Benefits of a minimalist solution
 
