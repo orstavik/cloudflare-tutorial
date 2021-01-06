@@ -1,38 +1,4 @@
 # cloudflare tricks
-
-## HowTo: display `request.headers`
-
-Remember `Array.from(..)` around `.keys()` and `.entries()` which just return an iterator.
-
-[see all the cloudflare headers!](https://cloudflareworkers.com/?&_ga=2.225834073.2138029206.1602683608-1010365947.1600154718#12a9195720fe4ed660949efdbd9c0219:https://tutorial.cloudflareworkers.com).
-
-```javascript
-async function handleRequest(request) {
-  const headers = Array.from(request.headers);
-  return new Response(
-    'url: ' + request.url + '\n' + 
-    'referer: ' + request.headers.get('referer') + '\n' + 
-    headers.map(header => `header: ${header}`).join('\n')
-  );
-}
-
-addEventListener('fetch', event => event.respondWith(handleRequest(event.request)));
-```
-
-## HowTo: display `urlSearchParams`
-
-Remember `Array.from()`.
-
-[see all the searchParams!](https://cloudflareworkers.com/#36cfc6c10bf9440a3ed0ff5d84e02abb:https://example.com/?alice&bob=sunshine&cat)
-
-```javascript
-
-const url = new URL('https://example.com/?alice&bob=sunshine&cat');
-const entries = Array.from(url.searchParams.entries());
-var keys = Array.from(url.searchParams.keys());
-console.log(`entries:${JSON.stringify(entries)}.`);
-console.log(`keys:${JSON.stringify(keys)}.`);
-```
         
 ## analyze the cf-request-id and cf-ray
 
