@@ -7,19 +7,16 @@ There are two ways to delay a worker:
 ## The `Promise` of sleep
 
 ```javascript
-new Promise(r=>setTimeout(r), 2000); //sleep for 2000ms
+new Promise(r=>setTimeout(r, 2000)); //sleep for 2000ms
 ```
 
 Demo:
 
 ```javascript
 async function handleRequest(request) {
-
-   new Promise(r=>setTimeout(r), 15000); //sleep/delay 15 seconds
-
-   return new Response('good morning!', {status: 200})
+   new Promise(r=>setTimeout(r, 15000)); //sleep/delay 15 seconds
+   return new Response('good morning!');
 }
-
 addEventListener('fetch', e => e.respondWith(handleRequest(e.request)));
 ```
 
