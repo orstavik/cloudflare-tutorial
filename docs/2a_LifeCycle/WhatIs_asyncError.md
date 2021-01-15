@@ -7,15 +7,15 @@
 Usually, js can capture `async Error`s quite simply:
 
 ```javascript
-async function omg(){
-  await new Promise(r=>setTimeout(r, 1000));
-  throw 'error occurs after 1 sec'; 
+async function omg() {
+  await new Promise(r => setTimeout(r, 1000));
+  throw 'error occurs after 1 sec';
 }
 
 (async function () {
-  try{
+  try {
     await omg();
-  } catch(err){
+  } catch (err) {
     console.log('you have captured an async Error: ', err);
   }
 })();
@@ -24,16 +24,16 @@ async function omg(){
 Furthermore, `try/catch` captures `async Error`s under the `await`, and not under the function invocation.
 
 ```javascript
-async function omg(){
-  await new Promise(r=>setTimeout(r, 1000));
-  throw 'error occurs after 1 sec'; 
+async function omg() {
+  await new Promise(r => setTimeout(r, 1000));
+  throw 'error occurs after 1 sec';
 }
 
 (async function () {
   const promise = omg();
-  try{
+  try {
     await promise;
-  } catch(err){
+  } catch (err) {
     console.log('you have captured an async Error: ', err);
   }
 })();
@@ -42,22 +42,23 @@ async function omg(){
 This differs from the `try/catch` behavior around normal, sync functions:
 
 ```javascript
-/*async*/ function omg(){
+/*async*/
+function omg() {
   //await new Promise(r=>setTimeout(r, 1000));
-  throw 'error occurs immediately'; 
+  throw 'error occurs immediately';
 }
 
 (async function () {
   let result;
-  try{
+  try {
     result = omg();
-  } catch(err){
+  } catch (err) {
     console.log('you have captured a sync Error: ', err);
   }
 
-  try{
+  try {
     await result;
-  } catch(err){
+  } catch (err) {
     console.log('there will be no error here, as you can await anything.');
   }
 })();
@@ -68,16 +69,16 @@ This differs from the `try/catch` behavior around normal, sync functions:
 No. JS handling of `async Error`s are not influenced by when the `Error` occurs:
 
 ```javascript
-async function omg(){
+async function omg() {
   throw 'error occurs immediately';
-  await new Promise(r=>setTimeout(r, 1000));
+  await new Promise(r => setTimeout(r, 1000));
 }
 
 (async function () {
-  const promise = omg();
-  try{
+  const promise = omg(); //the async keyword returns an already rejected promise
+  try {
     await promise;
-  } catch(err){
+  } catch (err) {
     console.log('you have captured an async Error: ', err);
   }
 })();
@@ -90,15 +91,15 @@ Partially. We can place a `try/catch` around a `Promise` that will be triggered 
 Yes, this demo works:
 
 ```javascript
-async function omg(){
+async function omg() {
   await new Promise(r => setTimeout(r, 1000));
   throw 'error occurs after 1 sec';
 }
 
-async function errorHandler(promise){
+async function errorHandler(promise) {
   try {
     await promise;
-  } catch(err){
+  } catch (err) {
     console.log("Error handling delegation.", err);
   }
 }
@@ -112,15 +113,15 @@ async function errorHandler(promise){
 No, this demo doesn't work:
 
 ```javascript
-async function omg(){
+async function omg() {
   await new Promise(r => setTimeout(r, 1000));
   throw 'error occurs after 1 sec';
 }
 
-async function errorHandler(promise){
+async function errorHandler(promise) {
   try {
     await promise;
-  } catch(err){
+  } catch (err) {
     console.log("Error handling delegation.", err);
   }
 }
@@ -136,7 +137,7 @@ If the function that invokes the async function that will trigger an `Error` doe
 
 ## HowTo: race between success and errors?
 
-So. If we need a function that needs to react differently if an async function produce an `Error` or a successful result, then we need to wrap the calling of the async function inside another `Promise`, and then use the underlying `Promise.then().catch()` as vehicle for our response. 
+So. If we need a function that needs to react differently if an async function produce an `Error` or a successful result, then we need to wrap the calling of the async function inside another `Promise`, and then use the underlying `Promise.then().catch()` as vehicle for our response.
 
 ```javascript
 function asyncErrorRace(fun, ...args) {
@@ -149,10 +150,32 @@ function asyncErrorRace(fun, ...args) {
 }
 ```
 
-A drawback of the above function, is that it will crash if the supplied `fun` is *sync*, ie. does not return a `Promise`. So, we extend the method to first screen for *sync* results and `Error`s, and then process the *async* result in the same way. 
+## TrumpPromise
+
+A promise that is rejected as soon as it is created. It will never/cannot resolve successfully. TrumpPromise NEVER wins a Promise.race. TrumpPromise always looses.
 
 ```javascript
-const neverEndingPromise = new Promise(r => r);
+let TrumpPromise;
+(TrumpPromise = Promise.reject()).catch(r => r);
+
+(async function () {
+  const whatComesToThoseWhoWaits = new Promise(r => setTimeout(() => r('good things'), 1000));
+  const outcome = await Promise.race([TrumpPromise, whatComesToThoseWhoWaits]);
+  console.log(outcome); //good things
+})();
+```
+
+## async and sync ErrorRace
+
+A drawback of the above function, is that it will crash if the supplied `fun` is *sync*, ie. does not return a `Promise`. So, we extend the method to first screen for *sync* results and `Error`s, and then process the *async* result in the same way.
+
+To fix this, we can solve the issue in the following way:
+
+```javascript
+let neverEndingPromise;
+(neverEndingPromise = Promise.reject()).catch(r => r);
+
+//The rejected promise will not win in a Promise.race.
 
 function asyncErrorRace(fun, ...args) {
   let tempResult;
@@ -171,10 +194,76 @@ function asyncErrorRace(fun, ...args) {
 }
 ```
 
-## Full demo: asyncErrorRace
+## ErrorRace with dependencies
+
+It can be a little tricky to add async dependencies to the asyncErrorRace. This is how you do it:
 
 ```javascript
-const neverEndingPromise = new Promise(r => r);
+//first await all deps, then run the fun(...args), return {success, error} as promises in an object.
+function asyncErrorRace(deps, fun, ...args) {
+  let resCb, errCb, success = new Promise(r => resCb = r), error = new Promise(r => errCb = r);
+  Promise.allSettled(deps).then(() => {
+    try {
+      const res = fun(...args);
+      res instanceof Promise ? res.then(r => resCb(r), e => errCb(e)) : resCb(res);
+    } catch (err) {
+      errCb(err);
+    }
+  });
+  return {success, error};
+}
+```
+
+There are two alternative implementation to this one: alternatives that both fail if any of the dependencies represent a failing `Promise`. Both pass the error of the asyncErrorRace in the `Error` result, and the two methods has slightly different error message and logic.
+
+```javascript
+//will await all deps, then run the fun with ...args, and return a set of [success, error] promises.
+function asyncErrorRaceFailDependency(deps, fun, ...args) {
+  let resCb, errCb;
+  const result = {success: new Promise(r => resCb = r), error: new Promise(r => errCb = r)};
+
+  Promise.all(deps).then(function () {
+    try {
+      const res = fun(...args);
+      res instanceof Promise ? res.then(r => resCb(r), e => errCb(e)) : resCb(res);
+    } catch (err) {
+      errCb(err);
+    }
+  }).catch(function () {
+    errCb(new ReferenceError(`Function asyncErrorRace could not invoke "${fun.name}".`));
+  });
+  return result;
+}
+
+function asyncErrorRaceFailDependencyWithDetailedError(deps, fun, ...args) {
+  let resCb, errCb;
+  const result = {success: new Promise(r => resCb = r), error: new Promise(r => errCb = r)};
+
+  Promise.allSettled(deps).then(function (depsState) {
+    const rejectedIndex = depsState.findIndex(dep => dep.status === 'rejected');
+    if (rejectedIndex >= 0) {
+      const error = new ReferenceError(`Function asyncErrorRace could not invoke "${fun.name}". Dependency #${rejectedIndex} rejected.`);
+      error.dependencyState = depsState;
+      return errCb(error);
+    }
+    try {
+      const res = fun(...args);
+      res instanceof Promise ? res.then(r => resCb(r), e => errCb(e)) : resCb(res);
+    } catch (err) {
+      errCb(err);
+    }
+  });
+  return result;
+}
+```
+
+## Full demo 1: syncAsyncErrorRace
+
+```javascript
+let neverEndingPromise;
+(neverEndingPromise = Promise.reject()).catch(r => r);
+
+//The rejected promise will not win in a Promise.race.
 
 function asyncErrorRace(fun, ...args) {
   let tempResult;
@@ -238,22 +327,137 @@ setTimeout(async function () {
 }, 2000);
 ```
 
+## Full demo 2: asyncErrorRace with dependencies
+
+```javascript
+  //will await all deps, then run the fun with ...args, and return a set of [success, error] promises.
+function asyncErrorRaceFailDependency(deps, fun, ...args) {
+  let resCb, errCb;
+  const result = {success: new Promise(r => resCb = r), error: new Promise(r => errCb = r)};
+
+  Promise.all(deps).then(function () {
+    try {
+      const res = fun(...args);
+      res instanceof Promise ? res.then(r => resCb(r), e => errCb(e)) : resCb(res);
+    } catch (err) {
+      errCb(err);
+    }
+  }).catch(function () {
+    errCb(new ReferenceError(`Function asyncErrorRace could not invoke "${fun.name}".`));
+  });
+  return result;
+}
+
+function asyncErrorRaceFailDependencyWithDetailedError(deps, fun, ...args) {
+  let resCb, errCb;
+  const result = {success: new Promise(r => resCb = r), error: new Promise(r => errCb = r)};
+
+  Promise.allSettled(deps).then(function (depsState) {
+    const rejectedIndex = depsState.findIndex(dep => dep.status === 'rejected');
+    if (rejectedIndex >= 0) {
+      const error = new ReferenceError(`Function asyncErrorRace could not invoke "${fun.name}". Dependency #${rejectedIndex} rejected.`);
+      error.dependencyState = depsState;
+      return errCb(error);
+    }
+    try {
+      const res = fun(...args);
+      res instanceof Promise ? res.then(r => resCb(r), e => errCb(e)) : resCb(res);
+    } catch (err) {
+      errCb(err);
+    }
+  });
+  return result;
+}
+
+async function inner(x) {
+  if (x < 0.25)
+    throw new Error('immediate error');
+  if (x < 0.5)
+    return 'immediate sunshine';
+  await new Promise(r => setTimeout(r, 1000));
+  if (x < 0.75)
+    throw new Error('delayed error');
+  return 'delayed sunshine';
+}
+
+function innerSync(x) {
+  if (x < 0.5)
+    throw new Error('sync error');
+  return 'sync sunshine';
+}
+
+//A TrumpPromise is a Promise that is silently invalidated at the very moment it is created.
+//A TrumpPromise will never resolve successfully.
+let TrumpPromise;
+setTimeout(function () {
+  (TrumpPromise = Promise.reject()).catch(r => r);
+})
+setTimeout(function () {
+  //A TrumpPromise is a LOSER. They always LOSE any Promise.race([...]).
+  //But, at the same time, they will do everything they can to block any other Promise in the race from finishing.
+  //This can be very useful when you don't want a race to finish.
+  console.log(Promise.race([TrumpPromise, new Promise(r => setTimeout(r, 4 * 365 * 24 * 3600 * 1000, 46))]).catch(r => r)); //never prints 46
+  console.log(Promise.race([TrumpPromise, null]).catch(r => r));                                                  //never prints null
+  console.log(Promise.race([TrumpPromise, undefined]).catch(r => r));                                             //never prints undefined
+  console.log(Promise.race([TrumpPromise, new Error('Error, null, undefined, they all beat TrumpPromise')]).catch(r => r)); //never prints undefined
+
+  //A TrumpPromise is asocial and will cause Promise.all([..]) to fail.
+  //This is not a very useful property..
+  Promise.all([TrumpPromise, new Error('Errors are not as bad'), null, undefined]).catch(err => console.log('failed to do anything')); //will throw an Error.
+}, 100)
+
+
+setTimeout(async function () {
+  const deps = [Promise.resolve(), undefined, 1, new Promise(r => setTimeout(r, 10))];
+  let {success: resultPromise, error: errorPromise} = asyncErrorRace(deps, inner, 0);
+  let {success: resultPromise1, error: errorPromise1} = asyncErrorRace(deps, inner, 0.4);
+  let {success: resultPromise2, error: errorPromise2} = asyncErrorRace(deps, inner, 0.7);
+  let {success: resultPromise3, error: errorPromise3} = asyncErrorRace(deps, inner, 1);
+  let {success: resultPromise4, error: errorPromise4} = asyncErrorRace(deps, innerSync, 0);
+  let {success: resultPromise5, error: errorPromise5} = asyncErrorRace(deps, innerSync, 1);
+  console.log(await Promise.race([resultPromise, errorPromise]));
+  console.log(await Promise.race([resultPromise1, errorPromise1]));
+  console.log(await Promise.race([resultPromise2, errorPromise2]));
+  console.log(await Promise.race([resultPromise3, errorPromise3]));
+  console.log(await Promise.race([resultPromise4, errorPromise4]));
+  console.log(await Promise.race([resultPromise5, errorPromise5]));
+});
+setTimeout(async function () {
+  const errorDeps = [TrumpPromise, Promise.resolve(), undefined, 1, new Promise(r => setTimeout(r, 10))];
+  const {success, error} = asyncErrorRace(errorDeps, inner, 0);
+  const res = await Promise.race([success, error]);
+  console.log(res, res.dependencyState);
+}, 3000);
+setTimeout(async function () {
+  const errorDeps = [TrumpPromise, Promise.resolve(), undefined, 1, new Promise(r => setTimeout(r, 10))];
+  const {success, error} = asyncErrorRaceFailDependency(errorDeps, inner, 0);
+  const res = await Promise.race([success, error]);
+  console.log(res, res.dependencyState);
+}, 3500);
+setTimeout(async function () {
+  const errorDeps = [TrumpPromise, Promise.resolve(), undefined, 1, new Promise(r => setTimeout(r, 10))];
+  const {success, error} = asyncErrorRaceFailDependencyWithDetailedError(errorDeps, inner, 0);
+  const res = await Promise.race([success, error]);
+  console.log(res, res.dependencyState);
+}, 4000);
+```
+
 ## References
 
- * dunno
-
+* dunno
 
 ## old drafts, can be deleted I think
+
 ```javascript
-async function omg(){
+async function omg() {
   await new Promise(r => setTimeout(r, 1000));
   throw 'error occurs after 1 sec';
 }
 
-async function errorHandler(promise){
+async function errorHandler(promise) {
   try {
     await promise;
-  } catch(err){
+  } catch (err) {
     console.log("Error handling delegation.", err);
   }
 }
@@ -272,21 +476,21 @@ async function errorHandler(promise){
 
 ```javascript
 //this works
-async function omg(){
+async function omg() {
   throw 'error occurs immediately';
   await new Promise(r => setTimeout(r, 1000));
   //return 'hello';
 }
 
-async function delegateHandlingCatchDoesntWork(promise){
+async function delegateHandlingCatchDoesntWork(promise) {
   try {
     await promise;
-  } catch(err){
+  } catch (err) {
     console.log("you have captured an async Error, but not in the same scope as from where the async function was invoked, and so this doesn't matter", err);
   }
-} 
+}
 
-async function callAwaitCatch(asyncFun, ...args){
+async function callAwaitCatch(asyncFun, ...args) {
   const promise = asyncFun(...args);
   delegateHandlingCatchDoesntWork(promise);
   return promise;
@@ -297,18 +501,18 @@ async function callAwaitCatch(asyncFun, ...args){
 })();
 ```
 
-if you invoke an async function dynamically, the js run-time doesn't recognize the "asyncness" of the `try` 
+if you invoke an async function dynamically, the js run-time doesn't recognize the "asyncness" of the `try`
 
 When an `async` function throws an `Error`, the `Error` is sometimes thrown during function invocation, and sometimes when the result is `await`ed. This means that relying on `try{...}catch(error){...}` is unsafe.
 
 ```javascript
-async function a(){
+async function a() {
   throw new Error('before the inner await');
-  await new Promise(r=>setTimeout(r, 10));
+  await new Promise(r => setTimeout(r, 10));
 }
 
-async function b(){
-  await new Promise(r=>setTimeout(r, 10));
+async function b() {
+  await new Promise(r => setTimeout(r, 10));
   throw new Error('after the inner await');
 }
 
@@ -320,13 +524,13 @@ async function b(){
 
   try {
     resolvedA = await A;
-  } catch (err){
+  } catch (err) {
     console.log(err.message);
   }
 
   try {
     resolvedB = await B;
-  } catch (err){
+  } catch (err) {
     console.log(err.message);
   }
   console.log(resolvedA === resolvedB && resolvedA === undefined); //true
@@ -338,6 +542,7 @@ Instead, we must rely on `.then(...)` and `.catch(...)`.
 ## WhatIs: an AsyncErrorRace?
 
 An AsyncErrorRace occurs when:
+
 1. the `async` function might throw an `Error`. By default, all `async` functions should be considered to produce exceptions, as most `async` operations rely on sub systems that might cause `Error`s. There are some exceptions of async functions that can be reliably called without considering `Error`s, such as `setTimeout` and `crypto` functions.
 2. when the function calling the `async` function needs to use the result from the `async` function which might throw an `Error`. Which again is the default mode of operation, as most `async` functions produce a result that is parsed/handled by the caller.
 
@@ -346,8 +551,8 @@ The AsyncErrorRace thus essentially need to wait for one of two results: a succe
 ```javascript
   async function errorRace(fun, ...args) {
   let resultCallback;
-  const resultPromise = new Promise(r=>resultCallback = r);
-  fun(...args).then(result => resultCallback([result])).catch(reason => resultCallback([,reason]));
+  const resultPromise = new Promise(r => resultCallback = r);
+  fun(...args).then(result => resultCallback([result])).catch(reason => resultCallback([, reason]));
   return resultPromise;
 }
 
@@ -356,7 +561,7 @@ async function inner(x) {
     throw new Error('immediate error');
   if (x < 0.5)
     return 'immediate sunshine';
-  await new Promise(r=>setTimeout(r, 10));
+  await new Promise(r => setTimeout(r, 10));
   if (x < 0.75)
     throw new Error('delayed error');
   return 'delayed sunshine';
@@ -370,31 +575,30 @@ async function inner(x) {
 
 ## Error race condition: race those `Error
 
-
-
 ## demo
 
 ```javascript
-async function doA(){
-  await new Promise(r=>setTimeout(r, Math.random()*10));
+async function doA() {
+  await new Promise(r => setTimeout(r, Math.random() * 10));
   throw new Error('omg');
 }
-async function doB(){
-  await new Promise(r=>setTimeout(r, Math.random()*10));
+
+async function doB() {
+  await new Promise(r => setTimeout(r, Math.random() * 10));
   return new Response('hello sunshine');
 }
 
-async function getErrorFromAwait(errorCallback, promise, status, publicMessage){
+async function getErrorFromAwait(errorCallback, promise, status, publicMessage) {
   try {
     await promise;
-  } catch(err){
+  } catch (err) {
     err.status = status;
     err.publicMessage = publicMessage;
     errorCallback(err);
   }
 }
 
-async function errorToResponse(error){
+async function errorToResponse(error) {
   const e = await error;
   return new Response(e.publicMessage + e.message, {status: e.status || 200});
 }
@@ -405,9 +609,9 @@ async function handleRequest(request) {
   b = doB();
 
   let errorCallback;
-  const error = new Promise(r=> errorCallback = r);
+  const error = new Promise(r => errorCallback = r);
   getErrorFromAwait(errorCallback, a, 403, 'wtf');
-  
+
   return Promise.race([b, errorToResponse(error)]);
 }
 
