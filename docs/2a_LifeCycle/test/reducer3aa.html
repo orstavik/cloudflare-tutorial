@@ -39,21 +39,22 @@
     return [promise, resolver];
   }
 
+  //3. we need a race style promise that can be triggered from many different directions, and
+  // that will that will also turn itself into the result on the context object.
+  function selfResolvingPromise(context, prop, triggerPromise) {
+    const [promise, resolver] = getPromiseResolver(context[prop]);
+    context[prop] = promise;
+    triggerPromise.then(v => context[prop] instanceof Promise && (resolver(v), context[prop] = v));
+  }
+
+  //4. finally the reducer.
   async function reducerMachine(e) {
     for (let [deps, reducer, prop, propError] of listOfReducers) {
       deps = deps.map(d => e[d]);
-      const {success: result, error} = asyncErrorRace(deps, reducer, e);
-      !prop && !propError && e.waitUntil(Promise.race([result, error]));      //observers
-      if (prop) {
-        const [promise, resolver] = getPromiseResolver(e[prop]);
-        e[prop] = promise;
-        result.then(v => e[prop] instanceof Promise && (resolver(v), e[prop] = v));
-      }
-      if (propError) {
-        const [promise, resolver] = getPromiseResolver(e[propError]);
-        e[propError] = promise;
-        error.then(v => e[propError] instanceof Promise && (resolver(v), e[propError] = v));
-      }
+      const {success, error} = asyncErrorRace(deps, reducer, e);
+      !prop && !propError && e.waitUntil(Promise.race([success, error]));      //observers
+      prop && selfResolvingPromise(e, prop, success);
+      propError && selfResolvingPromise(e, propError, error);
     }
     return (await e.response).clone();
     //the response returned will be used up, and so it is not possible to use in a log.
