@@ -1,0 +1,103 @@
+The ResponseRaceStateMachine (RR) is a async state machine pattern. It races from a starting state towards an end state,
+via several intermediate states.
+
+The RR is a acyclic graph where each state represents **both** a point in time and a point in space.
+
+<iframe style="border: 1px solid rgba(0, 0, 0, 0.1);" width="800" height="450"
+        src="https://www.figma.com/embed?embed_host=share&url=https%3A%2F%2Fwww.figma.com%2Ffile%2FEqGMWvJQqd1yvhd3EwZmO1%2FResponseRace-2%3Fnode-id%3D0%253A1"
+        allowfullscreen></iframe>
+
+The states in the figure above is represented as circles with a unique name (`/[a-zA-Z]+/`).
+
+Actions convert one (or more states) into one of two new states: success or error.
+These outcomes are signified as black(success) and red(error) arrows.
+There is no difference between success and error states, a state is just a thing in time,
+in principle they can be anything such as a string, Error, an Object, undefined, false, Response, Stream etc.
+
+The same state can be used by many different actions.
+
+Different actions can **race** to fill a new state. In such circumstances, only the first result will count,
+all later results will be disregarded.
+
+Actions will be invoked as soon as all their incoming states are resolved. If an incoming state is optional,
+meaning that an action should start even though the incoming state is not fulfilled,
+the action will begin even when the incoming state has yet to be made. Optional, incoming states are prefixed with `*`
+in the argument list of the action.
+
+Actions that have incoming states and outcoming states are called computers;
+Actions that have zero outgoing states and only incoming states are called observers.
+
+The RR starts with a `request` state and returns a `Promise` with the end `.response` state + a list of Promises for all the observer states.
+
+In JS, the RR graph is represented as an array of `[arguments, action, outcome, error]`:
+
+<script>
+  const actions = [
+    [['request'], helloSunshine, 'response', 'error'],               //computer
+    [['request'], maybeError, 'hello', 'maybeError'],                //computer
+    [['maybeError'], maybeErrorHandler, 'error', 'error'],           //computer
+    [['error'], errorToResult, 'response', 'response'],              //computer
+    [['response', '*hello'], log]                                    //observer, *hello is an option incoming state
+  ];
+</script>
+
+The RR is implemented using the WrapSuccessError and FirstComeWinsObject patterns.
+
+<script type="module">
+  import {cloneResponseProxy, firstComeWins} from './FirstComeWinsObject.js';
+  import {wrapSuccessError} from './WrapSuccessError.js';
+
+
+  function responseRaceStateMachine(request, actions) {
+    const state = cloneResponseProxy(new Proxy({request}, firstComeWins));
+    const observers = [];
+    for (let [args, reducer, prop, propError] of actions) {
+      const {success, error} = wrapSuccessError(state, reducer, args);
+      prop && (state[prop] = success);
+      propError && (state[propError] = error);
+      prop || propError || observers.push(Promise.race([success, error]));
+    }
+    return ['response' in state ? state.response : undefined, observers];
+  }
+</script>
+
+The RR is used in workers that await `Request` and wish to turn them into a `Response`.
+In JS, the request is given as a `fetch` event, and the `Response` is returned by calling `respondWith()` on the `FetchEvent`.
+
+In JS, especially in Cloudflare workers, the run time is taken down as soon as the `Response` passed to the `respondWith()` method is resolved.
+This is good, as we often would like other tasks that were initiated, but not used in the production of the `Response` to be dropped.
+But, this is also bad as we might wish to take actions such as logging or caching of results for future benefit *after* the response has been delivered.
+Put simply, in the JS workers run-time, we would like to `respondWith()` the `response` state, but `waitUntil()` all the observer actions has completed.
+
+<script>
+  addEventListener('fetch', e => {
+    const [response, observers] = responseRaceStateMachine(e.request, actions);
+    e.respondWith(response);
+    e.waitUntil(Promise.allSettled(observers));
+  });
+</script>
+
+In Cloudflare workers, there is also the possibility of passing the request to the origin, ie. letting the cdn handle the request instead.
+This occurse when either `e.respondWith()` is not called, or when `passThroughOnException()` is called, and an exception is called.
+
+However, as of Jan 2021, there is a bug in the Cloudflare system. Cloudflare will **disregard** `waitUntil()` when the cdn completes handling the request. This means that we need to make some work-arounds. What we do is establish the following rules:
+If the `response` is the `FetchEvent.prototype.passThroughOnException` method object, then we will trigger the CDN when all observers are complete.
+We will then
+
+<script>
+  addEventListener('fetch', e => {
+    const [response, observers] = responseRaceStateMachine(e.request, actions);
+    e.waitUntil(observers);
+
+    e.passThroughOnException();
+    e.respondWith(async function(){
+      await Promise.allSettled(observers);
+      const result = await response;
+      if (result === FetchEvent.prototype.passThroughOnException)
+        throw new Error('use passTroughOnException to trigger the CDN.');
+      return result; //todo test if respondWith(error) will be enough.
+    }());
+    //e.respondWith(response); we don't need this, as we are going to pass to the cdn asap
+    //e.waitUntil(Promise.allSettled(observers)); //this will not have any effect, any lingering async action has ~30ms anyways
+  });
+</script>

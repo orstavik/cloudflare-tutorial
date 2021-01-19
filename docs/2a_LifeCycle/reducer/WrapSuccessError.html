@@ -6,7 +6,7 @@ Basically the wrapSuccessError will:
 <script>
   "use strict";
   //2. the asyncErrorRace with dependency support
-  const neverEndingPromise = new Promise(r => r);
+  const neverEnds = new Promise(r => r);
 
   //removes *-prefix and turns all (pending) Promises into undefined
   // (a normal object will be able to hold Promises, but a firstWinsObject will only hold pending Promises.)
@@ -32,13 +32,13 @@ Basically the wrapSuccessError will:
       const argsRightNow = getArgsRightNow(state, args);
       const res = fun(...argsRightNow);
       if (!(res instanceof Promise))
-        return {success: res, error: neverEndingPromise};
+        return {success: res, error: neverEnds};
       let resCb, errCb;
       const success = new Promise(r => resCb = r), error = new Promise(r => errCb = r);
       res.then(r => resCb(r), e => errCb(e));
       return {success, error};
     } catch (err) {
-      return {success: neverEndingPromise, error: err};
+      return {success: neverEnds, error: err};
     }
   }
 
