@@ -1,0 +1,156 @@
+<script>
+  //1. firstDeclarationWins
+  const firstComeWins = {
+    p_r: new WeakMap(),
+    get: function (target, prop, receiver) {
+      if (prop in target)                 //the target has a property
+        return Reflect.get(...arguments); //simply return it
+      let resolver;                                    //request made for a property not yet set
+      const promise = new Promise(r => resolver = r);  //will make a new Promise
+      Reflect.set(target, prop, promise);              //that is added to the firstWinsObject
+      this.p_r.set(promise, resolver);                      //and that resolves when the prop on the
+      return promise;                                  //firstWinsObject first resolves.
+    },
+    set: function (target, prop, value) {
+      //1. the prop is already set and resolved? do nothing
+      if (prop in target && !(target[prop] instanceof Promise))
+        return true;
+
+      //2. the new value is a promise? simply try again when the new value resolves
+      if (value instanceof Promise)
+        return value.then(newVal => this.set(target, prop, newVal)) && true; //target[prop] = newVal behaves like Reflect.get.
+
+      //3. the prop is unset and the new value is resolved? just set it
+      if (!(prop in target))
+        return Reflect.set(target, prop, value);
+
+      //4. The prop is a promise and the new value is resolved? 1. update target, 2. resolve awaiting promises.
+      //at this point (target[prop] instanceof Promise && !(value instanceof Promise)) is always true
+      const resolver = this.p_r.get(target[prop]);
+      Reflect.set(target, prop, value);       //the firstWinsObject is always up to date,
+      resolver(target[prop]);                 //before callbacks for the awaiting promises start
+      return true;
+    }
+  };
+
+  async function testAsync(ms, value, res) {
+    await new Promise(r => setTimeout(r, ms));
+    res.push(value);
+    return value;
+  }
+</script>
+
+The firstComeWins object apply the following rules:
+1. A non-`Promise` value can only be set once per property.
+If a property is already set to a value other than a `Promise`, then that property can never change.
+<script type="module">
+  const race = new Proxy({}, firstComeWins);
+  race.a = 'a';
+  race.b = undefined;
+  race.a = 'b';
+  race.b = 'b2';
+  console.log(1, race.a === 'a', race.b === undefined);
+</script>
+
+2. If a property value is set to a `Promise`, then when that `Promise` is resolved,
+the property value of the firstComeWins object will automatically be updated.
+
+<script type="module">
+  setTimeout(async function () {
+    const race = new Proxy({}, firstComeWins);
+    const res = [];
+    race.b = testAsync(20, 'slow', res);
+    race.a = testAsync(10, 'fast', res);
+    console.log(2, race.a instanceof Promise, race.b instanceof Promise);
+    await race.a, await race.b;
+    console.log(2, res.join('') === 'fastslow');
+  }, 1000);
+</script>
+
+3. Several `Promise`s can be set for any property. The value will then be set to the *first* property that is set. Thus, the outcome of two (or more) *async* functions can be ascribed to a property of the firstComeWins object, they will race, and the first of the two *async* methods that return will set the property.
+
+<script type="module">
+  setTimeout(async function () {
+    const race = new Proxy({}, firstComeWins);
+    const promiseSlow = race.a = testAsync(20, 'slow');
+    const promiseFast = race.a = testAsync(10, 'fast');
+    console.log(3, promiseFast !== promiseSlow, race.a instanceof Promise, race.a !== promiseFast, race.a !== promiseSlow);
+    console.log(3, 'fast' === await race.a, promiseFast, promiseSlow);   //prints 'b', promiseA is pending, promiseB is fulfilled
+    await promiseSlow;
+    console.log(3, 'fast' === await race.a);
+  }, 2000);
+</script>
+
+<script type="module">
+  setTimeout(function () {
+    async function sleepThen(ms, value) {
+      await new Promise(r => setTimeout(r, ms));
+      return value;
+    }
+
+    const race = new Proxy({}, firstComeWins);
+    const promiseA = race.a = sleepThen(20, 'a');
+    const promiseB = race.a = sleepThen(10, 'b');
+    race.a = 'c';
+    console.log(race.a, promiseA, promiseB);   //prints 'c', promiseA and promiseB is pending
+    setTimeout(() => console.log(race.a), 30);  //prints 'c', firstComeWins
+  }, 2500);
+</script>
+
+4. If you ask for a property either before it is set, or while it is set to a (group of) `Promise`s, then you will receive another `Promise`. This `Promise` will resolve as soon as the value of the firstComeWins object is resolved.
+
+<script type="module">
+  setTimeout(function () {
+    async function sleepThen(ms, value) {
+      await new Promise(r => setTimeout(r, ms));
+      return value;
+    }
+
+    const race = new Proxy({}, firstComeWins);
+    console.log(!('a' in race));             //true
+    const future = race.a;
+    console.log('a' in race, race.a);        //true, pending Promise
+
+    race.a = sleepThen(20, 'a');
+    console.log(future === race.a, race.a);  //true, pending Promise
+    (async function () {
+      await race.a;
+      console.log(future !== race.a, race.a, future); //true, 'a', fulfilled Promise
+    })();
+  }, 3000);
+</script>
+
+## nested Proxies
+
+FirstComeWins objects is implemented via `Proxy`, and `Proxy` can be nested.
+
+CloneResponseProxy
+
+<script type="module">
+  function cloneResponseProxy(target) {
+    return new Proxy(target, {
+      get: function (target, prop, receiver) {
+        const og = Reflect.get(target, prop, receiver);
+        return og instanceof Response ? og.clone() : og;
+      }
+    })
+  }
+
+
+  setTimeout(function () {
+    async function sleepThen(ms, value) {
+      await new Promise(r => setTimeout(r, ms));
+      return value;
+    }
+
+    const race = cloneResponseProxy(new Proxy({}, firstComeWins));
+    const responseOG = new Response('a');
+    race.a = sleepThen(20, responseOG);
+    (async function () {
+      const responseClone = await race.a;
+      console.log(responseClone !== responseOG, responseClone !== race.a); //true, true
+      console.log(responseClone, responseOG);     //they contain the same data
+    })();
+  }, 4000);
+
+</script>
