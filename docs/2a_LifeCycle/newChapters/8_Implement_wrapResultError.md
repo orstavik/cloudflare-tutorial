@@ -23,12 +23,25 @@ If the goal of the function invocation is already met by other means before the 
 ## Implementation
 
 ```javascript
+function goalIsMet(context, goal){
+  return Object.getOwnPropertyNames(context).indexOf(goal) !== -1 && !(context[goal] instanceof Promise);
+}
+
+function argValueRightNow(context, arg){
+  arg = arg[0] === '*' ? arg.substr(1) : arg;
+  return context[arg] instanceof Promise ? undefined : context[arg]; 
+}
+
+function requiredArgs(context, args){
+  return args.filter(arg => arg[0] !== '*').map(arg => context[arg]).filter(arg => arg instanceof Promise);
+}
+
 function wrapResultError(context, fun, args, goal) {
-  const awaitArgs = args.filter(arg => arg[0] !== '*').map(arg => context[arg]).filter(arg => arg instanceof Promise);
+  const awaitArgs = requiredArgs(context, args);
   if (!awaitArgs.length) {        //attempt fully sync management
-    if (Object.getOwnPropertyNames(context).indexOf(goal) !== -1 && !(context[goal] instanceof Promise))
+    if (goalIsMet(context, goal))
       return {cancel: true};
-    const argsRightNow = args.map(arg => context[arg[0] === '*' ? arg.substr(1) : arg]).map(arg => arg instanceof Promise ? undefined : arg);
+    const argsRightNow = args.map(arg => argValueRightNow(context, arg));
     try {
       const res = fun(...argsRightNow);
       if (!(res instanceof Promise))
@@ -44,9 +57,9 @@ function wrapResultError(context, fun, args, goal) {
   let resCb, errCb;
   const success = new Promise(r => resCb = r), error = new Promise(r => errCb = r);
   Promise.allSettled(awaitArgs).then(() => {
-    if (Object.getOwnPropertyNames(context).indexOf(goal) !== -1 && !(context[goal] instanceof Promise))
-      return;
-    const argsRightNow = args.map(arg => context[arg[0] === '*' ? arg.substr(1) : arg]).map(arg => arg instanceof Promise ? undefined : arg);
+    if (goalIsMet(context, goal))
+      return; //todo should this be notified somewhere.
+    const argsRightNow = args.map(arg => argValueRightNow(context, arg));
     try {
       const res = fun(...argsRightNow);
       res instanceof Promise ?
@@ -148,5 +161,6 @@ console.log(b.success === 'hello sunshineundefined');
 ```
 
 5. TODO Test that the goal is met
+6. TODO test the new code clean up.
 
 ## References 
