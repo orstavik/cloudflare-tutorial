@@ -35,7 +35,7 @@ The ResponseRace is a modification of the AsyncDecorator pattern that adds the f
 
 4. The ResponseRace is started when it is given:
    1. a start state with a single property `request` which contains a `Request` object, and
-   2. a list of actions specified in the following format:
+   2. a list of actions specified as `[incoming states, action, normal outcome state, error state]`. For example:
 ```javascript
 const actions = [
   [['request'], decorator1, 'success1', 'error'],
@@ -52,7 +52,7 @@ const actions = [
 
 7. The array of observers are considered `Promise`s that will be keep the worker session alive until they are all resolved.
 
-## Demo: SunshineRace
+## Demo: SunshineRace web server
 
 <iframe style="border: 1px solid rgba(0, 0, 0, 0.1);" width="800" height="450"
 src="https://www.figma.com/embed?embed_host=share&url=https%3A%2F%2Fwww.figma.com%2Ffile%2FEqGMWvJQqd1yvhd3EwZmO1%2FResponseRace-2%3Fnode-id%3D0%253A1"
@@ -60,18 +60,7 @@ allowfullscreen></iframe>
 
 Each action in the figure above convert one (or more states) into one of two new states: success or error. The black arrows signify the potential successful outcome of an action; the red arrow is the potential when the function `throw` an `Error`.
 
-Each action will wait until all its incoming states has been given a value. And each action can represent an optional  If an incoming state is optional,
-meaning that an action should start even though the incoming state is not fulfilled,
-the action will begin even when the incoming state has yet to be made. Optional, incoming states are prefixed with `*`
-in the argument list of the action.
-
-Actions that have incoming states and outcoming states are called computers;
-Actions that have zero outgoing states and only incoming states are called observers.
-
-The RR starts with a `request` state and returns a `Promise` with the end `.response` state + a list of Promises for all the observer states.
-
-In JS, the RR graph is represented as an array of `[arguments, action, outcome, error]`:
-
+Each action waits until all its incoming states has been given a value (except when the incoming state is marked optional with the prefix `x`). It is unknown if an action will `Error`. It is unknown how much time each action will take. This means that it is unknown exactly which path and which functions will end up fulfilling the `response` in the application.
 
 ## Todo: Open issue
 
