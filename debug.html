@@ -1,7 +1,25 @@
 <h1>Hello sunshine</h1>
+<pre>here comes the text</pre>
 <script>
-  const hash = location.hash;
-  const txt = document.createElement('pre');
-  hash && (txt.innerText = hash.substr(1));
-  document.body.appendChild(txt);
+  function render() {
+    if (!location.hash)
+      return;
+    document.querySelector('pre').innerText = location.hash.substr(1);
+  }
+  render();
+  window.addEventListener('hashchange', render);
 </script>
+
+
+1. Make main table.
+A. List all state names and duplicate actions list in two arrays.
+B. Iterate the state names. Move all state names to next row in main table that is not an output state of any of the actions.
+C. Iterate the actions duplicate. Move all actions to the next row in the main table that has no input that is listed in the states list.
+Repeat B and C until empty state and duplicate actions lists.
+D. Konvert the main table into a map: state name/actionid =>[x, y].
+
+3. Iterate actions list to make inputEdgeList.
+A. For each input, make an entry with [actionid, state name, state koordinate, action koordinate].
+
+5 and 7. Do the same as inputEdgeList, except for result and error.
+
