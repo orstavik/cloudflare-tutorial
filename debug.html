@@ -1,0 +1,7 @@
+<h1>Hello sunshine</h1>
+<script>
+  const hash = location.hash;
+  const txt = document.createElement('pre');
+  hash && (txt.innerText = hash.substr(1));
+  document.body.appendChild(txt);
+</script>
