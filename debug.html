@@ -24,6 +24,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
+    z-index: 1;
   }
 
   .state { border-color: green; border-radius: 50%;}
@@ -44,13 +45,11 @@
   }
 
   function stateNames(actions) {
-    const stateNames = new Set();
-    for (let [args, fun, prop, propError] of actions) {
-      args.forEach(param => stateNames.add(param[0] === '*' ? param.substr(1) : param));
-      stateNames.add(prop);
-      stateNames.add(propError);
-    }
-    return Array.from(stateNames);
+    return actions
+      .map(([ps, _, r, e]) => [...ps, r, e])
+      .flat(1)
+      .map(s => s[0] === '*' ? s.substr(1) : s)
+      .filter((s, i, ar) => ar.indexOf(s) === i);
   }
 
   function splitInTwo(array, isValid) {
@@ -58,99 +57,117 @@
   }
 
   function stateActionSequence(actions, states) {
-    if (states.length === 0 && actions.length === 0)
+    if (states.length === 0)
       return [];
-    const [readyS, restS] = splitInTwo(states, name => !actions.find(action => action[2] === name || action[3] === name));
-    const [readyA, restA] = splitInTwo(actions, ([params]) => params.every(p => !restS.includes(p[0] === '*' ? p.substr(1) : p)));
+    const [readyS, restS] = splitInTwo(states, id => !actions.find(({result, error}) => result === id || error === id));
+    const [readyA, restA] = splitInTwo(actions, ({params}) => params.every(p => !restS.includes(p[0] === '*' ? p.substr(1) : p)));
     const result = stateActionSequence(restA, restS);
     readyA.length && result.unshift(readyA);
-    result.unshift(readyS);
+    result.unshift(readyS.map(state => ({id: state})));
     return result;
   }
 
-  function toCoordinates(mainTable) {
-    const map = new Map();
-    for (let y = 0; y < mainTable.length; y++) {
-      let rowEntries = mainTable[y];
-      for (let x = 0; x < rowEntries.length; x++)
-        map.set(rowEntries[x], [x, y]);
+  function addCoordinatesIdKeyAndCalcUnit(table) {
+    const res = {};
+    let x = table.length;
+    for (let y = 0; y < table.length; y++) {
+      table[y].length > x && (x = table[y].length);
+      for (let x = 0; x < table[y].length; x++) {
+        table[y][x].pos = [x, y];
+        res[table[y][x].id] = table[y][x];
+      }
     }
-    return map;
+    return [res, x];
   }
 
-  function makeVector(one, two, mainMap, optional) {
-    return {coordinate: [mainMap.get(two), mainMap.get(one)], optional};
+  function actionToCallSequence(idToPos, callSequence) {
+    for (let i = 0; i < callSequence.length; i++) {
+      let call = callSequence[i];
+      const [actionId, type] = call.split('_');
+      const action = idToPos[actionId];
+      type === undefined ? action.invoke = i : (action.resolve = i, action.status = type);
+    }
   }
 
-  function inputEdges(actions, mainMap) {
-    return actions.map(action => action[0].map(param => makeVector(action, param[0] === '*' ? param.substr(1) : param, mainMap, param[0] === '*')));
+  function convertEdges(idToPos) {
+    for (let i = 0, action; action = idToPos[i]; i++) {
+      let {params, fun, result, error, id, pos, invoke, resolve, status} = action;
+      action.params = params.map(p => {
+        const optional = p[0] === '*';
+        const state = optional ? p.substr(1) : p;
+        return {state, xy: idToPos[state].pos, xy2: pos, action: id, optional, invoke}
+      });
+      action.result = {state: result, xy: pos, xy2: idToPos[result].pos, action: id};
+      action.error = {state: error, xy: pos, xy2: idToPos[error].pos, action: id};
+      if (status.indexOf('e') >= 0) {
+        action.error.resolve = resolve;
+        action.error.status = status;
+      } else {
+        action.result.resolve = resolve;
+        action.result.status = status;
+      }
+    }
   }
 
-  function outputEdges(actions, mainMap) {
-    return actions.map(action => makeVector(action[2], action, mainMap));
-  }
+  function computeOM(hash) {
+    let [actions, callSequence] = Array.from(hashToObj(hash));
+    const mainTable = stateActionSequence(
+      actions.map(([params, fun, result, error], id) => ({params, fun, result, error, id})),
+      stateNames(actions)
+    );
 
-  function errorEdges(actions, mainMap) {
-    return actions.map(action => makeVector(action[3], action, mainMap));
-  }
-
-  function calculateGridUnit(mainTable) {
-    const X = mainTable.reduce((prevMaxLength, currentRow) => Math.max(prevMaxLength, currentRow.length), 0);
-    return Math.floor(100 / (Math.max(mainTable.length, X) + 1));
+    const [idToPos, unit] = addCoordinatesIdKeyAndCalcUnit(mainTable);
+    actionToCallSequence(idToPos, callSequence);
+    convertEdges(idToPos);
+    return [idToPos, unit];
   }
 
   function printCoordinate([x, y], xy2) {
     let pos = `--x: ${x}; --y: ${y};`;
-    if (!xy2)
+    if (xy2 === undefined)
       return pos;
-    let [x2, y2] = xy2;
+    const [x2, y2] = xy2;
     const angle = Math.floor(Math.atan2(y2 - y, x2 - x) * 180 / Math.PI);
     const diagonal = Math.sqrt(Math.pow((x2 - x), 2) + Math.pow((y2 - y), 2));
     return pos + ` --angle: ${angle}deg; --diagonal: ${diagonal};`;
   }
 
-  function makeElement(unit, pos) {
-    const isState = !(pos[1] % 2);
+  function makeElement(unit) {
     const div = document.createElement('div');
-    div.innerText = isState ? unit : unit[1] || 'function';
-    div.style.cssText = printCoordinate(pos);
-    div.classList.add(isState ? 'state' : 'action');
-    return div;
+    div.innerText = unit.fun || unit.id;
+    div.id = unit.id;
+    div.style.cssText = printCoordinate(unit.pos);
+    div.setAttribute('resolve', unit.resolve);
+    div.setAttribute('invoke', unit.invoke);
+    div.setAttribute('status', unit.status);
+    div.classList.add('fun' in unit ? 'action' : 'state');
+    if (!unit.result)
+      return [div];
+    const result = makeElementEdge('output', unit.result);
+    const error = makeElementEdge('error', unit.error);
+    const params = unit.params.map(p => makeElementEdge('input', p));
+    return [div, ...params, result, error];
   }
 
-  function makeElementEdge(type, {coordinate, optional}) {
+  function makeElementEdge(type, {optional, xy, xy2, resolve, status, invoke}) {
     const div = document.createElement('div');
     optional && (div.innerText += '*');
-    div.style.cssText = printCoordinate(...coordinate);
+    div.style.cssText = printCoordinate(xy, xy2);
     div.classList.add(type);
+    resolve && div.setAttribute('resolve', resolve);
+    invoke && div.setAttribute('invoke', invoke);
+    status && div.setAttribute('status', status);
     return div;
   }
 
-  function render() {
-    if (!location.hash)
-      return;
-    const [actions, callSequence] = Array.from(hashToObj(location.hash.substr(1)));
-    const states = stateNames(actions);
-    const mainTable = stateActionSequence(actions, states);
-
-    document.styleSheets[0].insertRule(`:root{ --unit: ${calculateGridUnit(mainTable)}%}`)
-
-    const mainMap = toCoordinates(mainTable);
-    const params = inputEdges(actions, mainMap);
-    const output = outputEdges(actions, mainMap);
-    const errors = errorEdges(actions, mainMap);
-    const html = []
-      .concat(output.map(edge => makeElementEdge('output', edge)))
-      .concat(errors.map(edge => makeElementEdge('error', edge)))
-      .concat(params.flat(Infinity).map(edge => makeElementEdge('input', edge)))
-      .concat(Array.from(mainMap.entries()).map(([unit, pos]) => makeElement(unit, pos)))
-    ;
+  function render([idToPos, unit]) {
+    document.styleSheets[0].insertRule(`:root{ --unit: ${Math.floor(100 / (unit + 1))}%}`)
     const mainDiv = document.querySelector('div');
-    html.forEach(el => mainDiv.append(el));
+    Object.values(idToPos).map(unit => makeElement(unit, idToPos)).flat(1).forEach(el => mainDiv.append(el));
   }
 
-  render();
-  window.addEventListener('hashchange', render);
+  render(computeOM(location.hash.substr(1)));
+  window.addEventListener('hashchange', e => location.hash && render(computeOM(location.hash.substr(1))));
 </script>
 
 <script>
@@ -162,7 +179,7 @@ A. List all state names and duplicate actions list.
 B. Iterate the state names. Move all state names to next row in main table that is not an output state of any of the actions.
 C. Iterate the actions duplicate. Move all actions to the next row in the main table that has no input that is listed in the states list.
 Repeat B and C until empty state and duplicate actions lists.
-D. Konvert the main table into a map: state name/actionid =>[x, y].
+D. Convert the main table into a map: state name/actionid =>[x, y].
 
 3. Iterate actions list to make inputEdgeList.
 A. For each input, make an entry with [actionid, state name, state koordinate, action koordinate].
