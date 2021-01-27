@@ -39,7 +39,7 @@
 
   function hashToObj(raw) {
     return JSON.parse(raw
-      .replaceAll(/[*_a-zA-Z][\w\d]*/g, s => `"${s}"`)
+      .replaceAll(/[*\w]+/g, s => `"${s}"`)
       .replaceAll(/,,/g, s => ',null,'));
   }
 
@@ -78,23 +78,23 @@
     return map;
   }
 
-  function makeVector(one, two, mainMap, number, optional) {
-    return {coordinate: [mainMap.get(two), mainMap.get(one)], number, optional};
+  function makeVector(one, two, mainMap, optional) {
+    return {coordinate: [mainMap.get(two), mainMap.get(one)], optional};
   }
 
   function inputEdges(actions, mainMap) {
-    return actions.map(action => action[0].map(param => makeVector(action, param[0] === '*' ? param.substr(1) : param, mainMap, undefined, param[0] === '*')));
+    return actions.map(action => action[0].map(param => makeVector(action, param[0] === '*' ? param.substr(1) : param, mainMap, param[0] === '*')));
   }
 
   function outputEdges(actions, mainMap) {
-    return actions.map(action => makeVector(action[2], action, mainMap, action[6] === 'success' ? action[5] : undefined));
+    return actions.map(action => makeVector(action[2], action, mainMap));
   }
 
   function errorEdges(actions, mainMap) {
-    return actions.map(action => makeVector(action[3], action, mainMap, action[6] === 'error' ? action[5] : undefined));
+    return actions.map(action => makeVector(action[3], action, mainMap));
   }
 
-  function getUnit(mainTable) {
+  function calculateGridUnit(mainTable) {
     const X = mainTable.reduce((prevMaxLength, currentRow) => Math.max(prevMaxLength, currentRow.length), 0);
     return Math.floor(100 / (Math.max(mainTable.length, X) + 1));
   }
@@ -118,9 +118,8 @@
     return div;
   }
 
-  function makeElementEdge(type, {coordinate, number, optional}) {
+  function makeElementEdge(type, {coordinate, optional}) {
     const div = document.createElement('div');
-    number !== undefined && (div.innerText = number);
     optional && (div.innerText += '*');
     div.style.cssText = printCoordinate(...coordinate);
     div.classList.add(type);
@@ -130,11 +129,11 @@
   function render() {
     if (!location.hash)
       return;
-    const actions = Array.from(hashToObj(location.hash.substr(1)));
+    const [actions, callSequence] = Array.from(hashToObj(location.hash.substr(1)));
     const states = stateNames(actions);
     const mainTable = stateActionSequence(actions, states);
 
-    document.styleSheets[0].insertRule(`:root{ --unit: ${getUnit(mainTable)}%}`)
+    document.styleSheets[0].insertRule(`:root{ --unit: ${calculateGridUnit(mainTable)}%}`)
 
     const mainMap = toCoordinates(mainTable);
     const params = inputEdges(actions, mainMap);
@@ -144,7 +143,7 @@
       .concat(output.map(edge => makeElementEdge('output', edge)))
       .concat(errors.map(edge => makeElementEdge('error', edge)))
       .concat(params.flat(Infinity).map(edge => makeElementEdge('input', edge)))
-    .concat(Array.from(mainMap.entries()).map(([unit, pos]) => makeElement(unit, pos)))
+      .concat(Array.from(mainMap.entries()).map(([unit, pos]) => makeElement(unit, pos)))
     ;
     const mainDiv = document.querySelector('div');
     html.forEach(el => mainDiv.append(el));
@@ -155,10 +154,8 @@
 </script>
 
 <script>
-  let test = `
-  [[[request],,a,a,0,1,success,set],[[request],,a,response,2,3,prelaunch,blocked],[[request],maybeError,hello,maybeError,4,5,error,set],[[maybeError],maybeErrorHandler,error,_error3,6,7,success,set],[[request],helloSunshine,response,_error4,8,12,async_success,blocked],[[error],errorToResult,response,response,9,10,success,set],[[response,*hello],log,_observer6,_error6,11,13,async_success,set]]
-  `;
-  location.hash = test.trim();
+  let test = `[[[[request],,a,a],[[request],,a,response],[[request],maybeError,hello,maybeError],[[maybeError],maybeErrorHandler,error,_error3],[[request],helloSunshine,response,_error4],[[error],errorToResult,response,response],[[response,*hello],log,_observer6,_error6]],[0,0_s,1_c,2,2_se,3,3_s,4,5,5_s,6,4_ba,6_sa]]`;
+  location.hash = test;
 </script>
 1. Make main table.
 A. List all state names and duplicate actions list.
@@ -171,4 +168,3 @@ D. Konvert the main table into a map: state name/actionid =>[x, y].
 A. For each input, make an entry with [actionid, state name, state koordinate, action koordinate].
 
 5 and 7. Do the same as inputEdgeList, except for result and error.
-
