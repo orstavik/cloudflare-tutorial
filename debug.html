@@ -1,3 +1,5 @@
+<style id="dynamic"></style>
+
 <style>
   #container {
     position: relative;
@@ -82,6 +84,8 @@
       table[y].length > x && (x = table[y].length);
       for (let x = 0; x < table[y].length; x++) {
         table[y][x].pos = [x, y];
+        table[y][x].x = x;
+        table[y][x].y = y;
         res[table[y][x].id] = table[y][x];
       }
     }
@@ -99,14 +103,15 @@
 
   function convertEdges(idToPos) {
     for (let i = 0, action; action = idToPos[i]; i++) {
-      let {params, fun, result, error, id, pos, invoke, resolve, status} = action;
+      let {params, fun, result, error, id, invoke, resolve, status, x, y} = action;
       action.params = params.map(p => {
         const optional = p[0] === '*';
         const state = optional ? p.substr(1) : p;
-        return {state, xy: idToPos[state].pos, xy2: pos, action: id, optional, invoke, type: 'input'}
+        const st = idToPos[state];
+        return {state, x: st.x, y: st.y, x2: x, y2: y, action: id, optional, invoke, type: 'input'};
       });
-      action.result = {state: result, xy: pos, xy2: idToPos[result].pos, action: id, type: 'output'};
-      action.error = {state: error, xy: pos, xy2: idToPos[error].pos, action: id, type: 'error'};
+      action.result = {state: result, x, y, x2: idToPos[result].x, y2: idToPos[result].y, action: id, type: 'output'};
+      action.error = {state: error, x, y, x2: idToPos[error].x, y2: idToPos[error].y, action: id, type: 'error'};
       if (status.indexOf('e') >= 0) {
         action.error.resolve = resolve;
         action.error.status = status;
@@ -127,52 +132,56 @@
     const [idToPos, unit] = addCoordinatesIdKeyAndCalcUnit(mainTable);
     actionToCallSequence(idToPos, callSequence);
     convertEdges(idToPos);
-    return [Object.values(idToPos), unit];
-  }
-
-  //todo printer
-  //todo printer
-  //todo printer
-  function printCoordinate([x, y], xy2) {
-    let pos = `--x: ${x}; --y: ${y};`;
-    if (xy2 === undefined)
-      return pos;
-    const [x2, y2] = xy2;
-    const angle = Math.floor(Math.atan2(y2 - y, x2 - x) * 180 / Math.PI);
-    const diagonal = Math.sqrt(Math.pow((x2 - x), 2) + Math.pow((y2 - y), 2));
-    return pos + ` --angle: ${angle}deg; --diagonal: ${diagonal};`;
-  }
-
-  function printInvokeResolve(resolve, invoke, status) {
-    let res = '';
-    resolve !== undefined && (res += ` --resolve: ${resolve};`);
-    status !== undefined && (res += ` --status: ${status};`);
-    invoke !== undefined && (res += ` --invoke: ${invoke};`);
-    return res;
-  }
-
-  function render2([units, displayUnit]) {
-    document.styleSheets[0].insertRule(`:root{ --unit: ${Math.floor(100 / (displayUnit + 1))}%}`)
-    const actions = units.filter(({type}) => type === 'action');
+    const units = Object.values(idToPos);
+    actions = units.filter(({type}) => type === 'action');
     const states = units.filter(({type}) => type === 'state');
     const edges = [
       ...actions.map(({params}) => params).flat(1),
       ...actions.map(({result}) => result),
       ...actions.map(({error}) => error)
     ];
-    states.forEach(state=>state.style = printCoordinate(state.pos));
-    actions.forEach(action=>action.style = printCoordinate(action.pos) + printInvokeResolve(action.resolve, action.invoke, action.status));
-    edges.forEach(edge=>edge.style = printCoordinate(edge.xy, edge.xy2));
-    
-    render(document.querySelector('div'), html`
-${edges.map(e => html`<div style="${(e.style)}" class="${(e.type)}">${e.optional ? '*' : ''}</div>`)}
-${actions.map(a => html`<div id="${(a.id)}" class="action" style="${(a.style)}">${a.fun || 'fun' + a.id}</div>`)}
-${states.map(s => html`<div style="${s.style}" class="${(s.type)}" id="${(s.id)}">${(s.id)}</div>`)}
-`);
+    return [actions, states, edges, unit];
   }
 
-  render2(computeOM(location.hash.substr(1)));
-  window.addEventListener('hashchange', e => location.hash && render2(computeOM(location.hash.substr(1))));
+
+  function updateView([actions, states, edges, displayUnit], step) {
+
+    render(document.querySelector('style#dynamic'), html`${`
+      div[invoke="${step}"], div[resolve="${step}"] { color: red; }
+      :root{ --unit: ${Math.floor(100 / (displayUnit + 1))}%}
+    `}`);
+
+    //make the angles and lines
+    edges.forEach(e => {
+      e.angle = Math.floor(Math.atan2(e.y2 - e.y, e.x2 - e.x) * 180 / Math.PI);
+      e.diagonal = Math.sqrt(Math.pow((e.x2 - e.x), 2) + Math.pow((e.y2 - e.y), 2));
+      e.style = ` --angle: ${(e.angle)}deg; --diagonal: ${(e.diagonal)};`
+    });
+    //add the positions
+    states.forEach(s => s.style = `--x: ${s.x}; --y: ${s.y};`);
+    actions.forEach(a => a.style = `--x: ${a.x}; --y: ${a.y};`);
+    edges.forEach(e => e.style += `--x: ${e.x}; --y: ${e.y};`);
+
+    render(document.querySelector('div'), html`
+      ${edges.map(e => html`
+        <div style="${(e.style)}" class="${(e.type)}">${e.optional ? '*' : ''}</div>`)}
+      ${actions.map(a => html`
+        <div id="${(a.id)}" class="action" style="${(a.style)}" invoke="${a.invoke}" resolve="${a.resolve}"
+             status="${a.status}">${a.fun || 'fun' + a.id}
+        </div>`)}
+      ${states.map(s => html`
+        <div style="${s.style}" class="${(s.type)}" id="${(s.id)}">${(s.id)}</div>`)}
+    `);
+  }
+
+  window.step = 7;
+  updateView(computeOM(location.hash.substr(1)), window.step);
+  window.addEventListener('hashchange', e => location.hash && updateView(computeOM(location.hash.substr(1))));
+
+  window.addEventListener('keydown', e => {
+    e.key === 'ArrowRight' && updateView(computeOM(location.hash.substr(1)), ++window.step);
+    e.key === 'ArrowLeft' && updateView(computeOM(location.hash.substr(1)), --window.step);
+  });
 </script>
 
 <script>
