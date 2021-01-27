@@ -40,6 +40,7 @@
 
 <script>
   html = uhtml.html;
+  render = uhtml.render;
   // import {render, html, svg} from 'https://unpkg.com/uhtml?module';
 
   //todo reducer
@@ -150,28 +151,24 @@
     return res;
   }
 
-  function makeElement({fun, id, pos, invoke, resolve, status, type}) {
-    const style = printCoordinate(pos) + printInvokeResolve(resolve, invoke, status);
-    return html.node`<div style="${style}" class="${type}" id="${id}">${fun || id}</div>`;
-  }
-
-  function makeElementEdge({optional, xy, xy2, resolve, status, invoke, type}) {
-    const style = printCoordinate(xy, xy2) + printInvokeResolve(resolve, invoke, status);
-    return html.node`<div style="${style}" class="${type}">${optional ? '*' : ''}</div>`;
-  }
-
   function render2([units, displayUnit]) {
     document.styleSheets[0].insertRule(`:root{ --unit: ${Math.floor(100 / (displayUnit + 1))}%}`)
-    const mainDiv = document.querySelector('div');
     const actions = units.filter(({type}) => type === 'action');
+    const states = units.filter(({type}) => type === 'state');
     const edges = [
       ...actions.map(({params}) => params).flat(1),
       ...actions.map(({result}) => result),
       ...actions.map(({error}) => error)
     ];
-    const lines = edges.map(p => makeElementEdge(p));
-    const divs = units.map(unit => makeElement(unit));
-    lines.concat(divs).forEach(el => mainDiv.append(el));
+    states.forEach(state=>state.style = printCoordinate(state.pos));
+    actions.forEach(action=>action.style = printCoordinate(action.pos) + printInvokeResolve(action.resolve, action.invoke, action.status));
+    edges.forEach(edge=>edge.style = printCoordinate(edge.xy, edge.xy2));
+    
+    render(document.querySelector('div'), html`
+${edges.map(e => html`<div style="${(e.style)}" class="${(e.type)}">${e.optional ? '*' : ''}</div>`)}
+${actions.map(a => html`<div id="${(a.id)}" class="action" style="${(a.style)}">${a.fun || 'fun' + a.id}</div>`)}
+${states.map(s => html`<div style="${s.style}" class="${(s.type)}" id="${(s.id)}">${(s.id)}</div>`)}
+`);
   }
 
   render2(computeOM(location.hash.substr(1)));
