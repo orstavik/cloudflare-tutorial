@@ -1,18 +1,162 @@
-<h1>Hello sunshine</h1>
-<pre>here comes the text</pre>
+<style>
+  #container {position: relative; margin-left: 100px; width: min(100vw, 100vh); height: min(100vw, 100vh)}
+  #container div { position: absolute;}
+  .state, .action { transform: translate(-50%, -50%); border: 2px solid black;}
+  .state { border-color: green; border-radius: 50%;}
+  .action { border-color: blue;}
+  .input { height: 2px; border-top: 2px solid darkgreen; transform-origin: top left;}
+  .output { height: 2px; border-top: 2px solid darkblue; transform-origin: top left;}
+  .error { height: 2px; border-top: 2px dotted orange; transform-origin: top left;margin-left: 2px;}
+
+  div.state, div.action {
+    width: min(8vw, 8vh);
+    height: min(4vw, 4vh);
+  }
+</style>
+
+<div id="container"></div>
+
 <script>
+  function makeLineCss(y1, y2, x1, x2, unit) {
+    const angle = Math.floor(Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI);
+    const distance = Math.sqrt(Math.pow((x2 - x1), 2) + Math.pow((y2 - y1), 2));
+    return `.line_${x1}_${y1}_${x2}_${y2} {
+    top: calc(${++y1} * var(--unit));
+    left: ${++x1 * unit}%;
+    transform: rotate(${angle}deg);
+    width: ${distance * unit}%; }`;
+  }
+
+  function generateCssGrid(mainTable) {
+    const style = document.createElement('style');
+    const Y = mainTable.length;
+    const X = mainTable.reduce((prevMaxLength, currentRow) => Math.max(prevMaxLength, currentRow.length), 0);
+    const unit = Math.floor(100 / (Math.max(Y, X) + 1));
+    const dims = `:root {--unit: ${unit}%}`;
+    const rows = Array(Y).fill(1).map((one, y) => `.row${y} { top: calc(${++y} * var(--unit))}`);
+    const cols = Array(X).fill(1).map((one, x) => `.col${x} { left: calc(${++x} * var(--unit))}`);
+    const lines = [];
+    for (let y1 = 0; y1 < Y; y1++) {
+      for (let y2 = y1 + 1; y2 < Y; y2 += 2) {
+        for (let x1 = 0; x1 < X; x1++) {
+          for (let x2 = 0; x2 < X; x2++) {
+            lines.push(makeLineCss(y1, y2, x1, x2, unit));
+          }
+        }
+      }
+    }
+    style.textContent = [dims, ...rows, '', ...cols, '', ...lines].join('\n');
+    return style;
+  }
+
+  function hashToObj(raw) {
+    return JSON.parse(raw
+      .replaceAll(/[*_a-zA-Z][\w\d]*/g, s => `"${s}"`)
+      .replaceAll(/,,/g, s => ',null,'));
+  }
+
+  function stateNames(actions) {
+    const stateNames = new Set();
+    for (let [args, fun, prop, propError] of actions) {
+      args.forEach(param => stateNames.add(param[0] === '*' ? param.substr(1) : param));
+      stateNames.add(prop);
+      stateNames.add(propError);
+    }
+    return Array.from(stateNames);
+  }
+
+  function splitInTwo(array, isValid) {
+    return array.reduce(([pass, fail], el) => isValid(el) ? [[...pass, el], fail] : [pass, [...fail, el]], [[], []]);
+  }
+
+  function stateActionSequence(actions, states) {
+    if (states.length === 0 && actions.length === 0)
+      return [];
+    const [readyS, restS] = splitInTwo(states, name => !actions.find(action => action[2] === name || action[3] === name));
+    const [readyA, restA] = splitInTwo(actions, ([params]) => params.every(p => !restS.includes(p[0] === '*' ? p.substr(1) : p)));
+    const result = stateActionSequence(restA, restS);
+    readyA.length && result.unshift(readyA);
+    result.unshift(readyS);
+    return result;
+  }
+
+  function toCoordinates(mainTable) {
+    const map = new Map();
+    for (let y = 0; y < mainTable.length; y++) {
+      let rowEntries = mainTable[y];
+      for (let x = 0; x < rowEntries.length; x++)
+        map.set(rowEntries[x], [x, y]);
+    }
+    return map;
+  }
+
+  function makeVector(one, two, mainMap, number, optional) {
+    return {coordinate: [mainMap.get(two), mainMap.get(one)], number, optional};
+  }
+
+  function inputEdges(actions, mainMap) {
+    return actions.map(action => action[0].map(param => makeVector(action, param[0] === '*' ? param.substr(1) : param, mainMap, undefined, param[0] === '*')));
+  }
+
+  function outputEdges(actions, mainMap) {
+    return actions.map(action => makeVector(action[2], action, mainMap, action[6] === 'success' ? action[5] : -1));
+  }
+
+  function errorEdges(actions, mainMap) {
+    return actions.map(action => makeVector(action[3], action, mainMap));
+  }
+
+  function makeElement(unit, pos) {
+    const isState = !(pos[1] % 2);
+    const div = document.createElement('div');
+    div.innerText = isState ? unit : unit[1] || 'function';
+    div.classList.add("row" + pos[1], 'col' + pos[0], isState ? 'state' : 'action');
+    return div;
+  }
+
+  function makeElementEdge(type, {coordinate, number, optional}) {
+    const div = document.createElement('div');
+    number >= 0 && (div.innerText = number);
+    optional && (div.innerText += '*');
+    div.classList.add(type, `line_${coordinate.flat(Infinity).join('_')}`);
+    return div;
+  }
+
   function render() {
     if (!location.hash)
       return;
-    document.querySelector('pre').innerText = location.hash.substr(1);
+    const actions = Array.from(hashToObj(location.hash.substr(1)));
+    const states = stateNames(actions);
+    const mainTable = stateActionSequence(actions, states);
+
+    const styleGrid = generateCssGrid(mainTable);
+    document.head.append(styleGrid);
+
+    const mainMap = toCoordinates(mainTable);
+    const params = inputEdges(actions, mainMap);
+    const output = outputEdges(actions, mainMap);
+    const errors = errorEdges(actions, mainMap);
+    const html = Array.from(mainMap.entries()).map(([unit, pos]) => makeElement(unit, pos))
+      .concat(output.map(edge => makeElementEdge('output', edge)))
+      .concat(errors.map(edge => makeElementEdge('error', edge)))
+      .concat(params.flat(Infinity).map(edge => makeElementEdge('input', edge)))
+    ;
+    const mainDiv = document.querySelector('div');
+    html.forEach(el => mainDiv.append(el));
   }
+
   render();
   window.addEventListener('hashchange', render);
 </script>
 
-
+<script>
+  let test = `
+  [[[request],,a,a,0,1,success,set],[[request],,a,response,2,3,prelaunch,blocked],[[request],maybeError,hello,maybeError,4,5,error,set],[[maybeError],maybeErrorHandler,error,_error3,6,7,success,set],[[request],helloSunshine,response,_error4,8,12,async_success,blocked],[[error],errorToResult,response,response,9,10,success,set],[[response,*hello],log,_observer6,_error6,11,13,async_success,set]]
+  `;
+  location.hash = test.trim();
+</script>
 1. Make main table.
-A. List all state names and duplicate actions list in two arrays.
+A. List all state names and duplicate actions list.
 B. Iterate the state names. Move all state names to next row in main table that is not an output state of any of the actions.
 C. Iterate the actions duplicate. Move all actions to the next row in the main table that has no input that is listed in the states list.
 Repeat B and C until empty state and duplicate actions lists.
