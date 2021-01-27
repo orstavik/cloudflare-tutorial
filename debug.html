@@ -3,6 +3,7 @@
     position: relative;
     width: min(100vw, 100vh);
     height: min(100vw, 100vh);
+    font-size: 10px;
   }
   #container div {
     position: absolute;
@@ -19,6 +20,10 @@
     border: 2px solid black;
     width: calc(var(--unit) * .6);
     height: calc(var(--unit) * .4);
+    background: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
   }
 
   .state { border-color: green; border-radius: 50%;}
@@ -82,11 +87,11 @@
   }
 
   function outputEdges(actions, mainMap) {
-    return actions.map(action => makeVector(action[2], action, mainMap, action[6] === 'success' ? action[5] : -1));
+    return actions.map(action => makeVector(action[2], action, mainMap, action[6] === 'success' ? action[5] : undefined));
   }
 
   function errorEdges(actions, mainMap) {
-    return actions.map(action => makeVector(action[3], action, mainMap));
+    return actions.map(action => makeVector(action[3], action, mainMap, action[6] === 'error' ? action[5] : undefined));
   }
 
   function getUnit(mainTable) {
@@ -115,7 +120,7 @@
 
   function makeElementEdge(type, {coordinate, number, optional}) {
     const div = document.createElement('div');
-    number >= 0 && (div.innerText = number);
+    number !== undefined && (div.innerText = number);
     optional && (div.innerText += '*');
     div.style.cssText = printCoordinate(...coordinate);
     div.classList.add(type);
@@ -135,10 +140,11 @@
     const params = inputEdges(actions, mainMap);
     const output = outputEdges(actions, mainMap);
     const errors = errorEdges(actions, mainMap);
-    const html = Array.from(mainMap.entries()).map(([unit, pos]) => makeElement(unit, pos))
+    const html = []
       .concat(output.map(edge => makeElementEdge('output', edge)))
       .concat(errors.map(edge => makeElementEdge('error', edge)))
       .concat(params.flat(Infinity).map(edge => makeElementEdge('input', edge)))
+    .concat(Array.from(mainMap.entries()).map(([unit, pos]) => makeElement(unit, pos)))
     ;
     const mainDiv = document.querySelector('div');
     html.forEach(el => mainDiv.append(el));
