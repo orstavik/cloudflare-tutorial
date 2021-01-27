@@ -9,7 +9,7 @@
     top: calc((var(--y) + 1) * var(--unit));
     left: calc((var(--x) + 1) * var(--unit));
   }
-  .input, .output, .error{
+  .input, .output, .error {
     transform-origin: top left;
     transform: rotate(var(--angle, 0));
     width: calc(var(--diagonal) * var(--unit));
@@ -31,23 +31,6 @@
 <div id="container"></div>
 
 <script>
-  function getAngle(x1, y1, x2, y2) {
-    return Math.floor(Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI);
-  }
-
-  function diagonal(x1, y1, x2, y2) {
-    return Math.sqrt(Math.pow((x2 - x1), 2) + Math.pow((y2 - y1), 2));
-  }
-
-  function generateCssGrid(mainTable) {
-    const style = document.createElement('style');
-    const Y = mainTable.length;
-    const X = mainTable.reduce((prevMaxLength, currentRow) => Math.max(prevMaxLength, currentRow.length), 0);
-    const unit = Math.floor(100 / (Math.max(Y, X) + 1));
-    const dims = `:root {--unit: ${unit}%}`;
-    style.textContent = [dims].join('\n');
-    return style;
-  }
 
   function hashToObj(raw) {
     return JSON.parse(raw
@@ -106,12 +89,26 @@
     return actions.map(action => makeVector(action[3], action, mainMap));
   }
 
+  function getUnit(mainTable) {
+    const X = mainTable.reduce((prevMaxLength, currentRow) => Math.max(prevMaxLength, currentRow.length), 0);
+    return Math.floor(100 / (Math.max(mainTable.length, X) + 1));
+  }
+
+  function printCoordinate([x, y], xy2) {
+    let pos = `--x: ${x}; --y: ${y};`;
+    if (!xy2)
+      return pos;
+    let [x2, y2] = xy2;
+    const angle = Math.floor(Math.atan2(y2 - y, x2 - x) * 180 / Math.PI);
+    const diagonal = Math.sqrt(Math.pow((x2 - x), 2) + Math.pow((y2 - y), 2));
+    return pos + ` --angle: ${angle}deg; --diagonal: ${diagonal};`;
+  }
+
   function makeElement(unit, pos) {
     const isState = !(pos[1] % 2);
     const div = document.createElement('div');
     div.innerText = isState ? unit : unit[1] || 'function';
-    div.style.setProperty('--x', pos[0]);
-    div.style.setProperty('--y', pos[1]);
+    div.style.cssText = printCoordinate(pos);
     div.classList.add(isState ? 'state' : 'action');
     return div;
   }
@@ -120,10 +117,7 @@
     const div = document.createElement('div');
     number >= 0 && (div.innerText = number);
     optional && (div.innerText += '*');
-    div.style.setProperty('--x', coordinate[0][0]);
-    div.style.setProperty('--y', coordinate[0][1]);
-    div.style.setProperty('--angle', getAngle(...coordinate.flat(Infinity)) + 'deg');
-    div.style.setProperty('--diagonal', diagonal(...coordinate.flat(Infinity)));
+    div.style.cssText = printCoordinate(...coordinate);
     div.classList.add(type);
     return div;
   }
@@ -135,8 +129,7 @@
     const states = stateNames(actions);
     const mainTable = stateActionSequence(actions, states);
 
-    const styleGrid = generateCssGrid(mainTable);
-    document.head.append(styleGrid);
+    document.styleSheets[0].insertRule(`:root{ --unit: ${getUnit(mainTable)}%}`)
 
     const mainMap = toCoordinates(mainTable);
     const params = inputEdges(actions, mainMap);
