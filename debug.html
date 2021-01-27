@@ -36,7 +36,11 @@
 
 <div id="container"></div>
 
+<script src="https://unpkg.com/uhtml">/* global uhtml */</script>
+
 <script>
+  html = uhtml.html;
+  // import {render, html, svg} from 'https://unpkg.com/uhtml?module';
 
   //todo reducer
   //todo reducer
@@ -66,7 +70,7 @@
     const [readyA, restA] = splitInTwo(actions, ({params}) => params.every(p => !restS.includes(p[0] === '*' ? p.substr(1) : p)));
     const result = stateActionSequence(restA, restS);
     readyA.length && result.unshift(readyA);
-    result.unshift(readyS.map(state => ({id: state})));
+    result.unshift(readyS.map(state => ({id: state, type: 'state'})));
     return result;
   }
 
@@ -98,10 +102,10 @@
       action.params = params.map(p => {
         const optional = p[0] === '*';
         const state = optional ? p.substr(1) : p;
-        return {state, xy: idToPos[state].pos, xy2: pos, action: id, optional, invoke}
+        return {state, xy: idToPos[state].pos, xy2: pos, action: id, optional, invoke, type: 'input'}
       });
-      action.result = {state: result, xy: pos, xy2: idToPos[result].pos, action: id};
-      action.error = {state: error, xy: pos, xy2: idToPos[error].pos, action: id};
+      action.result = {state: result, xy: pos, xy2: idToPos[result].pos, action: id, type: 'output'};
+      action.error = {state: error, xy: pos, xy2: idToPos[error].pos, action: id, type: 'error'};
       if (status.indexOf('e') >= 0) {
         action.error.resolve = resolve;
         action.error.status = status;
@@ -115,14 +119,14 @@
   function computeOM(hash) {
     let [actions, callSequence] = Array.from(hashToObj(hash));
     const mainTable = stateActionSequence(
-      actions.map(([params, fun, result, error], id) => ({params, fun, result, error, id})),
+      actions.map(([params, fun, result, error], id) => ({params, fun, result, error, id, type: 'action'})),
       stateNames(actions)
     );
 
     const [idToPos, unit] = addCoordinatesIdKeyAndCalcUnit(mainTable);
     actionToCallSequence(idToPos, callSequence);
     convertEdges(idToPos);
-    return [idToPos, unit];
+    return [Object.values(idToPos), unit];
   }
 
   //todo printer
@@ -138,42 +142,40 @@
     return pos + ` --angle: ${angle}deg; --diagonal: ${diagonal};`;
   }
 
-  function makeElement(unit) {
-    const div = document.createElement('div');
-    div.innerText = unit.fun || unit.id;
-    div.id = unit.id;
-    div.style.cssText = printCoordinate(unit.pos);
-    div.setAttribute('resolve', unit.resolve);
-    div.setAttribute('invoke', unit.invoke);
-    div.setAttribute('status', unit.status);
-    div.classList.add('fun' in unit ? 'action' : 'state');
-    if (!unit.result)
-      return [div];
-    const result = makeElementEdge('output', unit.result);
-    const error = makeElementEdge('error', unit.error);
-    const params = unit.params.map(p => makeElementEdge('input', p));
-    return [div, ...params, result, error];
+  function printInvokeResolve(resolve, invoke, status) {
+    let res = '';
+    resolve !== undefined && (res += ` --resolve: ${resolve};`);
+    status !== undefined && (res += ` --status: ${status};`);
+    invoke !== undefined && (res += ` --invoke: ${invoke};`);
+    return res;
   }
 
-  function makeElementEdge(type, {optional, xy, xy2, resolve, status, invoke}) {
-    const div = document.createElement('div');
-    optional && (div.innerText += '*');
-    div.style.cssText = printCoordinate(xy, xy2);
-    div.classList.add(type);
-    resolve && div.setAttribute('resolve', resolve);
-    invoke && div.setAttribute('invoke', invoke);
-    status && div.setAttribute('status', status);
-    return div;
+  function makeElement({fun, id, pos, invoke, resolve, status, type}) {
+    const style = printCoordinate(pos) + printInvokeResolve(resolve, invoke, status);
+    return html.node`<div style="${style}" class="${type}" id="${id}">${fun || id}</div>`;
   }
 
-  function render([idToPos, unit]) {
-    document.styleSheets[0].insertRule(`:root{ --unit: ${Math.floor(100 / (unit + 1))}%}`)
+  function makeElementEdge({optional, xy, xy2, resolve, status, invoke, type}) {
+    const style = printCoordinate(xy, xy2) + printInvokeResolve(resolve, invoke, status);
+    return html.node`<div style="${style}" class="${type}">${optional ? '*' : ''}</div>`;
+  }
+
+  function render2([units, displayUnit]) {
+    document.styleSheets[0].insertRule(`:root{ --unit: ${Math.floor(100 / (displayUnit + 1))}%}`)
     const mainDiv = document.querySelector('div');
-    Object.values(idToPos).map(unit => makeElement(unit, idToPos)).flat(1).forEach(el => mainDiv.append(el));
+    const actions = units.filter(({type}) => type === 'action');
+    const edges = [
+      ...actions.map(({params}) => params).flat(1),
+      ...actions.map(({result}) => result),
+      ...actions.map(({error}) => error)
+    ];
+    const lines = edges.map(p => makeElementEdge(p));
+    const divs = units.map(unit => makeElement(unit));
+    lines.concat(divs).forEach(el => mainDiv.append(el));
   }
 
-  render(computeOM(location.hash.substr(1)));
-  window.addEventListener('hashchange', e => location.hash && render(computeOM(location.hash.substr(1))));
+  render2(computeOM(location.hash.substr(1)));
+  window.addEventListener('hashchange', e => location.hash && render2(computeOM(location.hash.substr(1))));
 </script>
 
 <script>
