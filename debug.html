@@ -1,35 +1,42 @@
 <style>
-  #container {position: relative; margin-left: 100px; width: min(100vw, 100vh); height: min(100vw, 100vh)}
+  #container {
+    position: relative;
+    width: min(100vw, 100vh);
+    height: min(100vw, 100vh);
+  }
   #container div {
     position: absolute;
-  }
-  .state, .action {
     top: calc((var(--y) + 1) * var(--unit));
     left: calc((var(--x) + 1) * var(--unit));
-    transform: translate(-50%, -50%); border: 2px solid black;}
+  }
+  .input, .output, .error{
+    transform-origin: top left;
+    transform: rotate(var(--angle, 0));
+    width: calc(var(--diagonal) * var(--unit));
+  }
+  .state, .action {
+    transform: translate(-50%, -50%);
+    border: 2px solid black;
+    width: calc(var(--unit) * .6);
+    height: calc(var(--unit) * .4);
+  }
+
   .state { border-color: green; border-radius: 50%;}
   .action { border-color: blue;}
-  .input { height: 2px; border-top: 2px solid darkgreen; transform-origin: top left;}
-  .output { height: 2px; border-top: 2px solid darkblue; transform-origin: top left;}
-  .error { height: 2px; border-top: 2px dotted orange; transform-origin: top left;margin-left: 2px;}
-
-  div.state, div.action {
-    width: min(8vw, 8vh);
-    height: min(4vw, 4vh);
-  }
+  .input { height: 2px; border-top: 2px solid darkgreen; }
+  .output { height: 2px; border-top: 2px solid darkblue; }
+  .error { height: 2px; border-top: 2px dotted orange; margin-left: 2px;}
 </style>
 
 <div id="container"></div>
 
 <script>
-  function makeLineCss(y1, y2, x1, x2, unit) {
-    const angle = Math.floor(Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI);
-    const distance = Math.sqrt(Math.pow((x2 - x1), 2) + Math.pow((y2 - y1), 2));
-    return `.line_${x1}_${y1}_${x2}_${y2} {
-    top: calc(${++y1} * var(--unit));
-    left: ${++x1 * unit}%;
-    transform: rotate(${angle}deg);
-    width: ${distance * unit}%; }`;
+  function getAngle(x1, y1, x2, y2) {
+    return Math.floor(Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI);
+  }
+
+  function diagonal(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow((x2 - x1), 2) + Math.pow((y2 - y1), 2));
   }
 
   function generateCssGrid(mainTable) {
@@ -38,19 +45,7 @@
     const X = mainTable.reduce((prevMaxLength, currentRow) => Math.max(prevMaxLength, currentRow.length), 0);
     const unit = Math.floor(100 / (Math.max(Y, X) + 1));
     const dims = `:root {--unit: ${unit}%}`;
-    const rows2 = Array(Y).fill(1).map((one, y) => `.y${y} { --y: ${y}}`);
-    const cols2 = Array(X).fill(1).map((one, x) => `.x${x} { --x: ${x}}`);
-    const lines = [];
-    for (let y1 = 0; y1 < Y; y1++) {
-      for (let y2 = y1 + 1; y2 < Y; y2 += 2) {
-        for (let x1 = 0; x1 < X; x1++) {
-          for (let x2 = 0; x2 < X; x2++) {
-            lines.push(makeLineCss(y1, y2, x1, x2, unit));
-          }
-        }
-      }
-    }
-    style.textContent = [dims, ...rows2, ...cols2, ...lines].join('\n');
+    style.textContent = [dims].join('\n');
     return style;
   }
 
@@ -115,7 +110,9 @@
     const isState = !(pos[1] % 2);
     const div = document.createElement('div');
     div.innerText = isState ? unit : unit[1] || 'function';
-    div.classList.add('y'+pos[1], 'x'+pos[0], isState ? 'state' : 'action');
+    div.style.setProperty('--x', pos[0]);
+    div.style.setProperty('--y', pos[1]);
+    div.classList.add(isState ? 'state' : 'action');
     return div;
   }
 
@@ -123,7 +120,11 @@
     const div = document.createElement('div');
     number >= 0 && (div.innerText = number);
     optional && (div.innerText += '*');
-    div.classList.add(type, `line_${coordinate.flat(Infinity).join('_')}`);
+    div.style.setProperty('--x', coordinate[0][0]);
+    div.style.setProperty('--y', coordinate[0][1]);
+    div.style.setProperty('--angle', getAngle(...coordinate.flat(Infinity)) + 'deg');
+    div.style.setProperty('--diagonal', diagonal(...coordinate.flat(Infinity)));
+    div.classList.add(type);
     return div;
   }
 
