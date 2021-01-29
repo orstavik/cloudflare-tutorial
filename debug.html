@@ -1,3 +1,76 @@
+
+
+<script>
+  function idToPosition(actions, states, res = {}, y = 0) {
+    //states which is an output in the actions
+    const notReadyStates = states.filter(s => actions.find(([i, p, f, r, e]) => r === s || e === s));
+    //actions which after ready states are removed, still lacks a required parameter
+    const notReadyActions = actions.filter(([_, params]) => params.filter(p => p[0] !== '*').find(p => notReadyStates.includes(p)));
+    states.filter(s => !notReadyStates.includes(s)).forEach((s, i) => res[s] = [i, y]);
+    actions.filter(a => !notReadyActions.includes(a)).forEach(([id], i) => res[id] = [i, y + 1]);
+    if (notReadyStates.length)
+      return idToPosition(notReadyActions, notReadyStates, res, y + 2);
+    return res;
+  }
+
+  function setCallOnStateAndEdge(action, state, call, dict) {
+    dict[state] = (dict[state] || '') + call;
+    dict[action + ':' + state] = call;
+  }
+
+  function elementToCall(callSequence, actions) {
+    const idToCall = {};
+    for (let callId = 0; callId < callSequence.length; callId++) {
+      const [actionId, status = 'i'] = callSequence[callId].split('_');
+      const [id, params, fun, output, error] = actions[actionId];
+      const call = `,${callId}_${status}`;
+      idToCall[actionId] = (idToCall[actionId] || '') + call;
+      if (status === 'i' || status === 'c')
+        params.forEach(pState => setCallOnStateAndEdge(actionId, pState.replace('*', ''), call, idToCall));
+      else if (status.indexOf('e') >= 0)
+        setCallOnStateAndEdge(actionId, error, call, idToCall);
+      else
+        setCallOnStateAndEdge(actionId, output, call, idToCall);
+    }
+    return idToCall;
+  }
+
+  function makeEdgeObj([action, state, optional], idToPos, idToCall) {
+    const [x, y] = idToPos[action];
+    const [x2, y2] = idToPos[state];
+    const call = idToCall[`${action}:${state}`];
+    return {action, state, x, y, x2, y2, call, optional};
+  }
+
+  function computeOM(hash) {
+    //converting the hash to obj
+    let [actions, callSequence] = Array.from(JSON.parse(hash.replaceAll(/[*\w]+/g, s => `"${s}"`).replaceAll(/,,/g, s => ',null,')));
+    //getting list of state names
+    const states = actions.map(([ps, _, r, e]) => [...ps.map(p => p[0] === '*' ? p.substr(1) : p), r, e]).flat(1).filter((s, i, ar) => ar.indexOf(s) === i);                //filtering out the state names
+    //getting list of edges
+    const params = actions.map(([params], id) => params.map(p => [id, p.replace('*', ''), p[0] === '*'])).flat(1);  //array of all the params
+    const results = actions.map(([ps, f, result], id) => [id, result]);
+    const errors = actions.map(([ps, f, r, error], id) => [id, error]);
+
+    //todo possible to skip..
+    actions = actions.map((action, i) => [i, ...action]); //adding the id of the action at the beginning
+
+    const idToPos = idToPosition(actions, states);
+    const idToCall = elementToCall(callSequence, actions);
+
+    const [maxX, maxY] = Object.values(idToPos).reduce(([max, may], [x, y]) => [Math.max(x, max), Math.max(y, may)], [0, 0]);
+
+    return [
+      states.map(s => ({id: s, x: idToPos[s][0], y: idToPos[s][1], call: idToCall[s]})),
+      actions.map(([id, _, fun]) => ({id, fun, x: idToPos[id][0], y: idToPos[id][1], call: idToCall[id]})),
+      params.map(p => makeEdgeObj(p, idToPos, idToCall)),
+      results.map(r => makeEdgeObj(r, idToPos, idToCall)),
+      errors.map(e => makeEdgeObj(e, idToPos, idToCall)),
+      Math.max(maxX, maxY)
+    ];
+  }
+</script>
+
 <style id="dynamic"></style>
 
 <style>
@@ -32,6 +105,7 @@
   .state { border-color: green; border-radius: 50%;}
   .action { border-color: blue;}
   .input { height: 2px; border-top: 2px solid darkgreen; }
+  div.input[optional="true"] { border-top-style: dotted; }
   .output { height: 2px; border-top: 2px solid darkblue; }
   .error { height: 2px; border-top: 2px dotted orange; margin-left: 2px;}
 </style>
@@ -39,148 +113,57 @@
 <div id="container"></div>
 
 <script src="https://unpkg.com/uhtml">/* global uhtml */</script>
-
 <script>
   html = uhtml.html;
   render = uhtml.render;
+
   // import {render, html, svg} from 'https://unpkg.com/uhtml?module';
-
-  //todo reducer
-  //todo reducer
-  //todo reducer
-  function hashToObj(raw) {
-    return JSON.parse(raw
-      .replaceAll(/[*\w]+/g, s => `"${s}"`)
-      .replaceAll(/,,/g, s => ',null,'));
+  function styleXY(x, y) {
+    return `--x: ${x}; --y: ${y};`;
   }
 
-  function stateNames(actions) {
-    return actions
-      .map(([ps, _, r, e]) => [...ps, r, e])
-      .flat(1)
-      .map(s => s[0] === '*' ? s.substr(1) : s)
-      .filter((s, i, ar) => ar.indexOf(s) === i);
+  function styleXY2(y2, y, x2, x) {
+    const a = Math.floor(Math.atan2(y2 - y, x2 - x) * 180 / Math.PI);
+    const d = Math.sqrt(Math.pow(x2 - x, 2) + Math.pow(y2 - y, 2));
+    return styleXY(x, y) + `--angle: ${a}deg; --diagonal: ${d};`
   }
 
-  function splitInTwo(array, isValid) {
-    return array.reduce(([pass, fail], el) => isValid(el) ? [[...pass, el], fail] : [pass, [...fail, el]], [[], []]);
-  }
-
-  function stateActionSequence(actions, states) {
-    if (states.length === 0)
-      return [];
-    const [readyS, restS] = splitInTwo(states, id => !actions.find(({result, error}) => result === id || error === id));
-    const [readyA, restA] = splitInTwo(actions, ({params}) => params.every(p => !restS.includes(p[0] === '*' ? p.substr(1) : p)));
-    const result = stateActionSequence(restA, restS);
-    readyA.length && result.unshift(readyA);
-    result.unshift(readyS.map(state => ({id: state, type: 'state'})));
-    return result;
-  }
-
-  function addCoordinatesIdKeyAndCalcUnit(table) {
-    const res = {};
-    let x = table.length;
-    for (let y = 0; y < table.length; y++) {
-      table[y].length > x && (x = table[y].length);
-      for (let x = 0; x < table[y].length; x++) {
-        table[y][x].pos = [x, y];
-        table[y][x].x = x;
-        table[y][x].y = y;
-        res[table[y][x].id] = table[y][x];
-      }
-    }
-    return [res, x];
-  }
-
-  function actionToCallSequence(idToPos, callSequence) {
-    for (let i = 0; i < callSequence.length; i++) {
-      let call = callSequence[i];
-      const [actionId, type] = call.split('_');
-      const action = idToPos[actionId];
-      type === undefined ? action.invoke = i : (action.resolve = i, action.status = type);
-    }
-  }
-
-  function convertEdges(idToPos) {
-    for (let i = 0, action; action = idToPos[i]; i++) {
-      let {params, fun, result, error, id, invoke, resolve, status, x, y} = action;
-      action.params = params.map(p => {
-        const optional = p[0] === '*';
-        const state = optional ? p.substr(1) : p;
-        const st = idToPos[state];
-        return {state, x: st.x, y: st.y, x2: x, y2: y, action: id, optional, invoke, type: 'input'};
-      });
-      action.result = {state: result, x, y, x2: idToPos[result].x, y2: idToPos[result].y, action: id, type: 'output'};
-      action.error = {state: error, x, y, x2: idToPos[error].x, y2: idToPos[error].y, action: id, type: 'error'};
-      if (status.indexOf('e') >= 0) {
-        action.error.resolve = resolve;
-        action.error.status = status;
-      } else {
-        action.result.resolve = resolve;
-        action.result.status = status;
-      }
-    }
-  }
-
-  function computeOM(hash) {
-    let [actions, callSequence] = Array.from(hashToObj(hash));
-    const mainTable = stateActionSequence(
-      actions.map(([params, fun, result, error], id) => ({params, fun, result, error, id, type: 'action'})),
-      stateNames(actions)
-    );
-
-    const [idToPos, unit] = addCoordinatesIdKeyAndCalcUnit(mainTable);
-    actionToCallSequence(idToPos, callSequence);
-    convertEdges(idToPos);
-    const units = Object.values(idToPos);
-    actions = units.filter(({type}) => type === 'action');
-    const states = units.filter(({type}) => type === 'state');
-    const edges = [
-      ...actions.map(({params}) => params).flat(1),
-      ...actions.map(({result}) => result),
-      ...actions.map(({error}) => error)
-    ];
-    return [actions, states, edges, unit];
-  }
-
-
-  function updateView([actions, states, edges, displayUnit], step) {
+  function updateView([states, actions, inputs, results, errors, displayUnit], step) {
 
     render(document.querySelector('style#dynamic'), html`${`
-      div[invoke="${step}"], div[resolve="${step}"] { color: red; }
+      div[call*=",${step}_"] { color: red; border-color: red; }
       :root{ --unit: ${Math.floor(100 / (displayUnit + 1))}%}
     `}`);
 
-    //make the angles and lines
-    edges.forEach(e => {
-      e.angle = Math.floor(Math.atan2(e.y2 - e.y, e.x2 - e.x) * 180 / Math.PI);
-      e.diagonal = Math.sqrt(Math.pow((e.x2 - e.x), 2) + Math.pow((e.y2 - e.y), 2));
-      e.style = ` --angle: ${(e.angle)}deg; --diagonal: ${(e.diagonal)};`
-    });
-    //add the positions
-    states.forEach(s => s.style = `--x: ${s.x}; --y: ${s.y};`);
-    actions.forEach(a => a.style = `--x: ${a.x}; --y: ${a.y};`);
-    edges.forEach(e => e.style += `--x: ${e.x}; --y: ${e.y};`);
 
     render(document.querySelector('div'), html`
-      ${edges.map(e => html`
-        <div style="${(e.style)}" class="${(e.type)}">${e.optional ? '*' : ''}</div>`)}
-      ${actions.map(a => html`
-        <div id="${(a.id)}" class="action" style="${(a.style)}" invoke="${a.invoke}" resolve="${a.resolve}"
-             status="${a.status}">${a.fun || 'fun' + a.id}
-        </div>`)}
-      ${states.map(s => html`
-        <div style="${s.style}" class="${(s.type)}" id="${(s.id)}">${(s.id)}</div>`)}
+      ${inputs.map(({x, y, x2, y2, optional, call}) => html`
+        <div class="input" style="${styleXY2(y2, y, x2, x)}" call="${call}" optional="${optional}">input</div>`)}
+      ${results.map(({x, y, x2, y2, call}) => html`
+        <div class="output" style="${styleXY2(y2, y, x2, x)}" call="${call}">result</div>`)}
+      ${errors.map(({x, y, x2, y2, call}) => html`
+        <div class="error" style="${styleXY2(y2, y, x2, x)}" call="${call}">error</div>`)}
+      ${actions.map(({id, fun, x, y, call}) => html`
+        <div class="action" id="${id}" style="${styleXY(x, y)}" call="${call}">${fun || `fun${id}`}</div>`)}
+      ${states.map(({id, x, y, call}) => html`
+        <div class="state" id="${id}" style="${styleXY(x, y)}" call="${call}">${id}</div>`)}
     `);
   }
 
   window.step = 7;
-  updateView(computeOM(location.hash.substr(1)), window.step);
-  window.addEventListener('hashchange', e => location.hash && updateView(computeOM(location.hash.substr(1))));
+  window.model = computeOM(location.hash.substr(1));
+  updateView(window.model, window.step);
+
+  window.addEventListener('hashchange', e => {
+    if (!location.hash) return;
+    window.model = computeOM(location.hash.substr(1));
+    updateView(window.model, window.step);
+  });
 
   window.addEventListener('keydown', e => {
-    e.key === 'ArrowRight' && updateView(computeOM(location.hash.substr(1)), ++window.step);
-    e.key === 'ArrowLeft' && updateView(computeOM(location.hash.substr(1)), --window.step);
+    e.key === 'ArrowRight' && ++window.step;
+    e.key === 'ArrowLeft' && --window.step;
+    updateView(window.model, window.step);
   });
 </script>
 
