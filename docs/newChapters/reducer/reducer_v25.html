@@ -47,10 +47,10 @@
   //todo this would also provide a simpler mechanism for printing, but it would be far bigger string. which is not what we want.
   //todo what we want is maybe to convert the frame we have now into a sequence of such maps and then simply animate by replacing
   //yes, that is good
-  function setDynamicVariable(frame, prop, value, type, actionId) {
+  function setDynamicVariable(frame, prop, value, seq) {
     if (frame.variables[prop])    //if the property is already filled, and the set is blocked, then no new frame will run.
-      return frame.sequence.push(actionId + '_b' + type); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
-    frame.sequence.push(actionId + '_s' + type)
+      return frame.sequence.push(seq + '_b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
+    frame.sequence.push(seq);
     frame.variables[prop] = value;
     if (prop === 'response' && frame.resolverResponse)
       frame.resolverResponse(value);
@@ -78,31 +78,31 @@
   function doDebug(debug, actions, variables, sequence) {
     if (debug instanceof Function)
       debug(actions, variables, sequence);
-    console.log(JSON.stringify([actions, sequence], (k,v) => v instanceof Function ? v.name: v).replaceAll('"', ''), variables);
+    console.log(JSON.stringify([actions, sequence], (k, v) => v instanceof Function ? v.name : v).replaceAll('"', ''), variables);
   }
 
   function run(frame) {
     const {actions, variables, debug, sequence} = frame;
     debug && doDebug(debug, actions, variables, sequence);
     for (let i = 0; i < actions.length; i++) {
-      if(sequence.includes(i) || sequence.includes(i+'_c')) //already invoked/cancelled
+      if (sequence.includes(i + '_i') || sequence.includes(i + '_c')) //already invoked/cancelled
         continue;
       let [args, fun, prop, propError] = actions[i];
       if (args.find(arg => arg[0] !== '*' && !(arg in variables)))//find unset, not-* arg
         continue;
       if (prop in variables) {//goal completed, cancelling
-        sequence.push(i +'_c');
+        sequence.push(i + '_c');
         continue;
       }
-      sequence.push(i);       //adding invoked
+      sequence.push(i + '_i');       //adding invoked
       const result = runFun(fun, variables, args);
       if (result.success instanceof Promise) {
-        result.success.then(s => setDynamicVariable(frame, prop, s, 'a', i) && run(frame));
-        result.error.then(e => setDynamicVariable(frame, propError, e, 'ae', i) && run(frame));
+        result.success.then(s => setDynamicVariable(frame, prop, s, i + '_ao') && run(frame));
+        result.error.then(e => setDynamicVariable(frame, propError, e, i + '_ae') && run(frame));
       } else if ('success' in result) {
-        return setDynamicVariable(frame, prop, result.success, '', i) && run(frame);    //TCO
+        return setDynamicVariable(frame, prop, result.success, i + '_o') && run(frame);    //TCO
       } else /*if ('error' in result)*/ {
-        return setDynamicVariable(frame, propError, result.error, 'e', i) && run(frame); //TCO
+        return setDynamicVariable(frame, propError, result.error, i + '_e') && run(frame); //TCO
       }
     }
     //todo if no action is added to the initial input, we have a dead end. This can be syntax checked.
