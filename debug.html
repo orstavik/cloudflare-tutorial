@@ -1,5 +1,3 @@
-
-
 <script>
   function idToPosition(actions, states, res = {}, y = 0) {
     //states which is an output in the actions
@@ -13,101 +11,137 @@
     return res;
   }
 
-  function setCallOnStateAndEdge(action, state, call, dict) {
-    dict[state] = (dict[state] || '') + call;
-    dict[action + ':' + state] = call;
-  }
-
-  function elementToCall(callSequence, actions) {
-    const idToCall = {};
-    for (let callId = 0; callId < callSequence.length; callId++) {
-      const [actionId, status = 'i'] = callSequence[callId].split('_');
-      const [id, params, fun, output, error] = actions[actionId];
-      const call = `,${callId}_${status}`;
-      idToCall[actionId] = (idToCall[actionId] || '') + call;
-      if (status === 'i' || status === 'c')
-        params.forEach(pState => setCallOnStateAndEdge(actionId, pState.replace('*', ''), call, idToCall));
-      else if (status.indexOf('e') >= 0)
-        setCallOnStateAndEdge(actionId, error, call, idToCall);
-      else
-        setCallOnStateAndEdge(actionId, output, call, idToCall);
-    }
-    return idToCall;
-  }
-
-  function makeEdgeObj([action, state, optional], idToPos, idToCall) {
-    const [x, y] = idToPos[action];
-    const [x2, y2] = idToPos[state];
-    const call = idToCall[`${action}:${state}`];
-    return {action, state, x, y, x2, y2, call, optional};
+  function statusToProps(status, callId) {
+    if (status === 'i') return {invoke: callId};
+    if (status === 'c') return {resolve: callId, cancel: true};
+    return {
+      resolve: callId,
+      async: status.indexOf('a') >= 0 || undefined,
+      blocked: status.indexOf('b') >= 0 || undefined,
+      isError: status.indexOf('e') >= 0 || undefined,
+      isOutput: status.indexOf('o') >= 0 || undefined
+    };
   }
 
   function computeOM(hash) {
     //converting the hash to obj
-    let [actions, callSequence] = Array.from(JSON.parse(hash.replaceAll(/[*\w]+/g, s => `"${s}"`).replaceAll(/,,/g, s => ',null,')));
+    let [actions, calls] = Array.from(JSON.parse(hash.replaceAll(/[*\w]+/g, s => `"${s}"`).replaceAll(/,,/g, s => ',null,')));
     //getting list of state names
     const states = actions.map(([ps, _, r, e]) => [...ps.map(p => p[0] === '*' ? p.substr(1) : p), r, e]).flat(1).filter((s, i, ar) => ar.indexOf(s) === i);                //filtering out the state names
     //getting list of edges
-    const params = actions.map(([params], id) => params.map(p => [id, p.replace('*', ''), p[0] === '*'])).flat(1);  //array of all the params
-    const results = actions.map(([ps, f, result], id) => [id, result]);
-    const errors = actions.map(([ps, f, r, error], id) => [id, error]);
-
-    //todo possible to skip..
     actions = actions.map((action, i) => [i, ...action]); //adding the id of the action at the beginning
 
     const idToPos = idToPosition(actions, states);
-    const idToCall = elementToCall(callSequence, actions);
-
     const [maxX, maxY] = Object.values(idToPos).reduce(([max, may], [x, y]) => [Math.max(x, max), Math.max(y, may)], [0, 0]);
+    //actions to obj
+    actions = actions.map(([id, inputs, fun, output, error]) => ({id, inputs, fun, output, error}));
+    //adding call to actions
+    const calls2 = [];
+    for (let callId = 0; callId < calls.length; callId++) {
+      const call = calls[callId];
+      const [actionId, status] = call.split('_');
+      const action = actions[actionId];
+      calls2.push({id: callId, action: actionId, fun: action.fun, status});
+      Object.assign(action, statusToProps(status, callId));
+    }
 
-    return [
-      states.map(s => ({id: s, x: idToPos[s][0], y: idToPos[s][1], call: idToCall[s]})),
-      actions.map(([id, _, fun]) => ({id, fun, x: idToPos[id][0], y: idToPos[id][1], call: idToCall[id]})),
-      params.map(p => makeEdgeObj(p, idToPos, idToCall)),
-      results.map(r => makeEdgeObj(r, idToPos, idToCall)),
-      errors.map(e => makeEdgeObj(e, idToPos, idToCall)),
-      Math.max(maxX, maxY)
-    ];
+    //actions {id, inputs, fun, output, error, invoke, resolve, cancel*, async*, isError*, isOutput*, blocked*}
+    return [actions, states, idToPos, calls2, maxX, maxY];
   }
 </script>
 
 <style id="dynamic"></style>
 
 <style>
+  * {
+    margin: 0; padding: 0; box-sizing: border-box;
+  }
   #container {
     position: relative;
-    width: min(100vw, 100vh);
-    height: min(100vw, 100vh);
+    margin: min(5vw, 5vh);
+    width: min(90vw, 90vh);
+    height: min(90vw, 90vh);
     font-size: 10px;
   }
-  #container div {
+  #container * {
     position: absolute;
-    top: calc((var(--y) + 1) * var(--unit));
-    left: calc((var(--x) + 1) * var(--unit));
   }
-  .input, .output, .error {
-    transform-origin: top left;
-    transform: rotate(var(--angle, 0));
-    width: calc(var(--diagonal) * var(--unit));
+  #container ul {
+    top: 0;
+    right: 0;
   }
-  .state, .action {
-    transform: translate(-50%, -50%);
-    border: 2px solid black;
-    width: calc(var(--unit) * .6);
-    height: calc(var(--unit) * .4);
+  #container ul li {
+    position: relative;
+  }
+  #container ul li[current] {
+    font-weight: bold;
+  }
+  flow-action, flow-state-placeholder {
+    top: calc(var(--y) * var(--unit));
+    left: calc(var(--x) * var(--unit));
+    width: calc(var(--unit) * .5);
+    height: calc(var(--unit) * .5);
+  }
+  flow-action {
+    --state-color: lightgrey;
+    --state-border: 0;
+  }
+  flow-action-placeholder, flow-state-placeholder {
     background: white;
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 1;
+  }
+  flow-action-placeholder {
+    border: 2px solid blue;
+    width: 90%;
+    height: 90%;
+  }
+  flow-state-placeholder {
+    border-radius: 50%;
+    border: 2px solid lightgray;
+  }
+  flow-state-placeholder:first-of-type {
+    border-color: green;
+  }
+  flow-state {
+    width: 100%;
+    height: 100%;
+    border-radius: 0 50% 50% 50%;
+    border: var(--state-border) solid var(--state-color);
+    transform-origin: center;
+    transform: rotate(calc(var(--angle) - 45deg));
+    top: calc(var(--y) * 200%);
+    left: calc(var(--x) * 200%);
+    background: radial-gradient(circle at 100% 100%, transparent 85%, var(--state-color));
   }
 
-  .state { border-color: green; border-radius: 50%;}
-  .action { border-color: blue;}
-  .input { height: 2px; border-top: 2px solid darkgreen; }
-  div.input[optional="true"] { border-top-style: dotted; }
-  .output { height: 2px; border-top: 2px solid darkblue; }
-  .error { height: 2px; border-top: 2px dotted orange; margin-left: 2px;}
+  flow-edge {
+    border-top: 2px solid var(--state-color);
+    width: calc(var(--diagonal) * 200% - 76%);
+    transform-origin: top left;
+    transform: rotate(var(--angle));
+    top: 50%;
+    left: 50%;
+  }
+  flow-action[resolve][blocked] > [type="output"] {--state-color: red;}
+  flow-action[resolved][blocked] > flow-state[type="output"] {--state-color: red;}
+  flow-action[resolved][cancelled] > [type="output"] {--state-color: black;}
+
+
+  flow-action[resolve][error]:not([blocked]) > [type="error"] {--state-color: orange; --state-border: 2px; background-color: rgba(255, 0, 0, 0.3);}
+  flow-action[resolved][error]:not([blocked]) > flow-state[type="error"] {--state-color: orange; --state-border: 2px;}
+
+  flow-action[resolve][output]:not([blocked]) > [type="output"] { --state-color: green; background-color: rgba(0, 255, 0, 0.3);}
+  flow-action[resolved][output]:not([blocked]) > flow-state[type="output"] {--state-color: green; --state-border: 2px;}
+  flow-action[invoke] > [type="input"] {--state-color: green; --state-border: 2px; background-color: rgba(0, 255, 0, 0.3);}
+
+  flow-action[resolved]:not([resolve]) > flow-action-placeholder { border-color: lightgrey; }
+  flow-action[invoked]:not([invoke]) > flow-action-placeholder { border-color: lightgrey; }
+  flow-action[invoked]:not([resolved]) > flow-action-placeholder,
+  flow-action[resolve] > flow-action-placeholder { background: lightblue; }
+
+  flow-edge[optional] {border-top-style: dotted}
 </style>
 
 <div id="container"></div>
@@ -117,60 +151,104 @@
   html = uhtml.html;
   render = uhtml.render;
 
-  // import {render, html, svg} from 'https://unpkg.com/uhtml?module';
   function styleXY(x, y) {
     return `--x: ${x}; --y: ${y};`;
   }
 
-  function styleXY2(y2, y, x2, x) {
-    const a = Math.floor(Math.atan2(y2 - y, x2 - x) * 180 / Math.PI);
-    const d = Math.sqrt(Math.pow(x2 - x, 2) + Math.pow(y2 - y, 2));
-    return styleXY(x, y) + `--angle: ${a}deg; --diagonal: ${d};`
+  function styleXY2(x, y) {
+    const a = Math.atan2(y, x) * 180 / Math.PI;
+    const d = Math.sqrt(x * x + y * y);
+    return `--x: ${x}; --y: ${y}; --angle: ${a}deg; --diagonal: ${d};`
   }
 
-  function updateView([states, actions, inputs, results, errors, displayUnit], step) {
-
+  //actions {id, inputs, fun, output, error, invoke, resolve}
+  function updateView([actions, states, idToPos, calls, maxX, maxY], step) {
     render(document.querySelector('style#dynamic'), html`${`
-      div[call*=",${step}_"] { color: red; border-color: red; }
-      :root{ --unit: ${Math.floor(100 / (displayUnit + 1))}%}
+      :root{ --unit: ${Math.floor(100 / (Math.max(maxY, maxX) + 1))}%}
     `}`);
 
 
-    render(document.querySelector('div'), html`
-      ${inputs.map(({x, y, x2, y2, optional, call}) => html`
-        <div class="input" style="${styleXY2(y2, y, x2, x)}" call="${call}" optional="${optional}">input</div>`)}
-      ${results.map(({x, y, x2, y2, call}) => html`
-        <div class="output" style="${styleXY2(y2, y, x2, x)}" call="${call}">result</div>`)}
-      ${errors.map(({x, y, x2, y2, call}) => html`
-        <div class="error" style="${styleXY2(y2, y, x2, x)}" call="${call}">error</div>`)}
-      ${actions.map(({id, fun, x, y, call}) => html`
-        <div class="action" id="${id}" style="${styleXY(x, y)}" call="${call}">${fun || `fun${id}`}</div>`)}
-      ${states.map(({id, x, y, call}) => html`
-        <div class="state" id="${id}" style="${styleXY(x, y)}" call="${call}">${id}</div>`)}
+    render(document.querySelector('#container'), html`
+      <ul>
+        ${calls.map(({id, action, fun, status}, i) => html`
+          <li id=${"call" + id} action=${action} status=${status} current=${i === step || undefined}>
+            ${fun || 'fun' + action}>${status}
+          </li>`)}
+      </ul>
+
+      ${states.map(state => html`
+        <flow-state-placeholder class="action" style=${styleXY(...idToPos[state])}>${state}</flow-state-placeholder>`)}
+
+      ${actions.map(action => {
+      let {id, inputs, fun, output, error, invoke, resolve, cancel, async, isError, isOutput, blocked} = action;
+
+      const [x, y] = idToPos[id];
+      const [xO, yO] = idToPos[output];
+      const [xE, yE] = idToPos[error];
+
+      const isInvoking = invoke === step || undefined;
+      const isResolving = resolve === step || undefined;
+      const resolved = resolve <= step || undefined;
+      const invoked = resolved || invoke <= step || undefined;
+      const pending = step > invoke && step < resolve || undefined;
+
+      return html`
+          <flow-action style=${styleXY(x, y)}
+                       invoked=${invoked} invoke=${isInvoking} pending=${pending} resolve=${isResolving}
+                       resolved=${resolved}
+                       async=${async} blocked=${blocked} cancelled=${cancel} error=${isError} output=${isOutput}>
+
+            <flow-edge type=error style=${styleXY2(xE - x, yE - y)}></flow-edge>
+            <flow-state type=error style=${styleXY2(xE - x, yE - y)} resolve=${resolve} step=${step}></flow-state>
+
+            <flow-edge type=output style=${styleXY2(xO - x, yO - y)}></flow-edge>
+            <flow-state type=output style=${styleXY2(xO - x, yO - y)} resolve=${resolve} step=${step}></flow-state>
+
+            ${inputs.map(input => {
+        const optional = input[0] === '*' || undefined;
+        input = optional ? input.substr(1) : input;
+        const [xI, yI] = idToPos[input];
+        return html`
+                <flow-edge type=input style=${styleXY2(xI - x, yI - y)} optional=${optional}></flow-edge>
+                <flow-state type=input style=${styleXY2(xI - x, yI - y)} invoke=${invoke} step=${step}
+                            optional=${optional}></flow-state>
+              `;
+      })}
+            <flow-action-placeholder>${fun || 'fun' + id}</flow-action-placeholder>
+          </flow-action>
+        `;
+    })}
     `);
   }
 
-  window.step = 7;
-  window.model = computeOM(location.hash.substr(1));
-  updateView(window.model, window.step);
-
-  window.addEventListener('hashchange', e => {
+  function init() {
     if (!location.hash) return;
-    window.model = computeOM(location.hash.substr(1));
-    updateView(window.model, window.step);
-  });
+    model = computeOM(location.hash.substr(1));
+    step = maxSteps = model[3].length - 1;
+    updateView(model, step);
+  }
+
+  function clamp(min, nextStep, max) {
+    return nextStep > max ? min : nextStep < min ? max : nextStep;
+  }
+
+  init();
+
+  window.addEventListener('hashchange', init);
 
   window.addEventListener('keydown', e => {
-    e.key === 'ArrowRight' && ++window.step;
-    e.key === 'ArrowLeft' && --window.step;
-    updateView(window.model, window.step);
+    e.key === 'ArrowRight' && (step = clamp(0, ++step, maxSteps));
+    e.key === 'ArrowLeft' && (step = clamp(0, --step, maxSteps));
+    updateView(model, step);
   });
 </script>
 
 <script>
-  let test = `[[[[request],,a,a],[[request],,a,response],[[request],maybeError,hello,maybeError],[[maybeError],maybeErrorHandler,error,_error3],[[request],helloSunshine,response,_error4],[[error],errorToResult,response,response],[[response,*hello],log,_observer6,_error6]],[0,0_s,1_c,2,2_se,3,3_s,4,5,5_s,6,4_ba,6_sa]]`;
+  let test = `[[[[request],,a,a],[[request],,a,response],[[request],maybeError,hello,maybeError],[[maybeError],maybeErrorHandler,error,_error3],[[request],helloSunshine,response,_error4],[[error],errorToResult,response,response],[[response,*hello],log,_observer6,_error6]],[0_i,0_o,1_c,2_i,2_e,3_i,3_o,4_i,5_i,5_o,6_i,4_aob,6_ao]]`;
   location.hash = test;
 </script>
+
+
 1. Make main table.
 A. List all state names and duplicate actions list.
 B. Iterate the state names. Move all state names to next row in main table that is not an output state of any of the actions.

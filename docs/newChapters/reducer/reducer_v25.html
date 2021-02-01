@@ -49,7 +49,7 @@
   //yes, that is good
   function setDynamicVariable(frame, prop, value, seq) {
     if (frame.variables[prop])    //if the property is already filled, and the set is blocked, then no new frame will run.
-      return frame.sequence.push(seq + '_b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
+      return frame.sequence.push(seq + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
     frame.sequence.push(seq);
     frame.variables[prop] = value;
     if (prop === 'response' && frame.resolverResponse)
