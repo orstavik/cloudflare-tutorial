@@ -75,10 +75,28 @@
     }
   }
 
+  // todo too much complexity?
+  // function stateToNum(state, states) {
+  //   let stateNum = states.indexOf(state);
+  //   if (stateNum >= 0)
+  //     return stateNum;
+  //   states.push(state);
+  //   return states.length - 1;
+  // }
+  //
   function doDebug(debug, actions, variables, sequence) {
     if (debug instanceof Function)
       debug(actions, variables, sequence);
-    console.log(JSON.stringify([actions, sequence], (k, v) => v instanceof Function ? v.name : v).replaceAll('"', ''), variables);
+    //todo this mutates the actions array, which in turn corrupts the running of the machine.
+    //todo this illustrates the sensitivity of the debug function. It should probably not run like this.
+    //todo It should probably only run at the end.
+    // const states = actions.reduce((states, action) => {
+    //   action[2] = stateToNum(action[2], states);
+    //   action[3] = stateToNum(action[3], states);
+    //   action[0] = action[0].map(arg => arg[0] === '*' ? '*' + stateToNum(arg.substr(1), states) : stateToNum(arg, states));
+    //   return states;
+    // }, []);
+    console.log(JSON.stringify([actions, sequence], (k, v) => v instanceof Function ? v.name : v).replaceAll('"', '')+'/'+ btoa(JSON.stringify(variables)));
   }
 
   function run(frame) {
