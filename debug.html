@@ -23,9 +23,9 @@
     };
   }
 
-  function computeOM(actionsCalls) {
+  function computeOM(actions, calls) {
     //converting the hash to obj
-    let [actions, calls] = Array.from(JSON.parse(actionsCalls.replaceAll(/[*\w]+/g, s => `"${s}"`).replaceAll(/,,/g, s => ',null,')));
+    // let [actions, calls] = Array.from(JSON.parse(actionsCalls.replaceAll(/[*\w]+/g, s => `"${s}"`).replaceAll(/,,/g, s => ',null,')));
     //getting list of state names
     const states = actions.map(([ps, _, r, e]) => [...ps.map(p => p[0] === '*' ? p.substr(1) : p), r, e]).flat(1).filter((s, i, ar) => ar.indexOf(s) === i);                //filtering out the state names
     //getting list of edges
@@ -267,9 +267,9 @@
 
   function init() {
     if (!location.hash) return;
-    const [machine, state] = location.hash.substr(1).split('/');
-    model = computeOM(machine);
-    variables = state && JSON.parse(atob(state));
+    const {actions, sequence,variables} = JSON.parse(atob(location.hash.substr(1)));
+    window.variables = variables;
+    model = computeOM(actions, sequence);
     step = 0;
     maxSteps = model[3].length - 1;
     updateView(model, variables, step);
@@ -291,7 +291,7 @@
 </script>
 
 <script>
-  let test = `[[[[request],,a,a],[[request],,a,response],[[request],maybeError,hello,maybeError],[[maybeError],maybeErrorHandler,error,_error3],[[request],helloSunshine,response,_error4],[[error],errorToResult,response,response],[[response,*hello],log,_observer6,_error6]],[0_i,0_o,1_c,2_i,2_e,3_i,3_o,4_i,5_i,5_o,6_i,4_aob,6_ao]]/eyJyZXF1ZXN0Ijp7InVybCI6Imh0dHBzOi8vdmcubm8vZXJyb3IifSwiYSI6IjEiLCJtYXliZUVycm9yIjp7fSwiZXJyb3IiOnsic3RhdHVzIjo0MDN9LCJyZXNwb25zZSI6e319`;
+  let test = `eyJhY3Rpb25zIjpbW1sicmVxdWVzdCJdLCIiLCJhIiwiYSJdLFtbInJlcXVlc3QiXSwiIiwiYSIsInJlc3BvbnNlIl0sW1sicmVxdWVzdCJdLCJtYXliZUVycm9yIiwiaGVsbG8iLCJtYXliZUVycm9yIl0sW1sibWF5YmVFcnJvciJdLCJtYXliZUVycm9ySGFuZGxlciIsImVycm9yIiwiX2Vycm9yMyJdLFtbInJlcXVlc3QiXSwiaGVsbG9TdW5zaGluZSIsInJlc3BvbnNlIiwiX2Vycm9yNCJdLFtbImVycm9yIl0sImVycm9yVG9SZXN1bHQiLCJyZXNwb25zZSIsInJlc3BvbnNlIl0sW1sicmVzcG9uc2UiLCIqaGVsbG8iXSwibG9nIiwiX29ic2VydmVyNiIsIl9lcnJvcjYiXV0sInNlcXVlbmNlIjpbIjBfaSIsIjBfbyIsIjFfYyIsIjJfaSIsIjJfZSIsIjNfaSIsIjNfbyIsIjRfaSIsIjVfaSIsIjVfbyIsIjZfaSIsIjRfYW9iIiwiNl9hbyJdLCJ2YXJpYWJsZXMiOnsicmVxdWVzdCI6eyJ1cmwiOiJodHRwczovL3ZnLm5vL2Vycm9yIn0sImEiOiIxIiwibWF5YmVFcnJvciI6e30sImVycm9yIjp7InN0YXR1cyI6NDAzfSwicmVzcG9uc2UiOnt9LCJfb2JzZXJ2ZXI2IjpudWxsfX0=`;
   location.hash = test;
 </script>
 
@@ -304,15 +304,3 @@ Todo:
 6. if there are other states used, but not given in, then mark those as syntax errors.
 7. states such as `a` should be marked as `not observeds`.
 8. etc.
-
-<!--<script>-->
-<!--todo add this as a test md file to illustrate the passThroughOnException() timing.-->
-<!--  addEventListener('fetch', e => {-->
-<!--    // e.passThroughOnException();//the hope is that we don't need to do this until we really need to.-->
-<!--    e.respondWith(async function () {-->
-<!--      await new Promise(r => setTimeout(r, 50));-->
-<!--      e.passThroughOnException();-->
-<!--      throw new Error('omg, we see the fallback page, or what?');-->
-<!--    }());-->
-<!--  });-->
-<!--</script>-->

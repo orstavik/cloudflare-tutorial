@@ -42,11 +42,6 @@
     return {response, observers};
   }
 
-  //todo mutates the actions. make actions immutable? what are the benefits? We could then make a progression of frames.
-  //todo this would make the debug action simpler? we could then store the stack trace in the frame, and then maybe skip the count?
-  //todo this would also provide a simpler mechanism for printing, but it would be far bigger string. which is not what we want.
-  //todo what we want is maybe to convert the frame we have now into a sequence of such maps and then simply animate by replacing
-  //yes, that is good
   function setDynamicVariable(frame, prop, value, seq) {
     if (frame.variables[prop])    //if the property is already filled, and the set is blocked, then no new frame will run.
       return frame.sequence.push(seq + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
@@ -75,28 +70,14 @@
     }
   }
 
-  // todo too much complexity?
-  // function stateToNum(state, states) {
-  //   let stateNum = states.indexOf(state);
-  //   if (stateNum >= 0)
-  //     return stateNum;
-  //   states.push(state);
-  //   return states.length - 1;
-  // }
-  //
   function doDebug(debug, actions, variables, sequence) {
     if (debug instanceof Function)
       debug(actions, variables, sequence);
-    //todo this mutates the actions array, which in turn corrupts the running of the machine.
-    //todo this illustrates the sensitivity of the debug function. It should probably not run like this.
-    //todo It should probably only run at the end.
-    // const states = actions.reduce((states, action) => {
-    //   action[2] = stateToNum(action[2], states);
-    //   action[3] = stateToNum(action[3], states);
-    //   action[0] = action[0].map(arg => arg[0] === '*' ? '*' + stateToNum(arg.substr(1), states) : stateToNum(arg, states));
-    //   return states;
-    // }, []);
-    console.log(JSON.stringify([actions, sequence], (k, v) => v instanceof Function ? v.name : v).replaceAll('"', '')+'/'+ btoa(JSON.stringify(variables)));
+    actions = actions.map(([params, fun, output, error]) => [params, fun.name, output, error]);//be careful not to mutate actions here..
+    const state = {};
+    for (let [key, value] of Object.entries(variables))
+      state[key] = value === undefined ? null : value;
+    console.log(btoa(JSON.stringify({actions, sequence, variables: state})));
   }
 
   function run(frame) {
@@ -199,19 +180,4 @@
       throw new Error();
     }());
   });
-
-  // addEventListener('fetch', e =>{
-  //   e.passThroughOnException();
-  //   const [response, observers] = reducerMachine(e.request, listOfReducers);
-  //   e.waitUntil(Promise.allSettled(observers));
-  //   e.respondWith(response);
-  // });
-
-  //1. split out and test the 3 fundamental resources, firstComeWins, resultErrorSynthesizer, reducer
-  //2. describe the function using the reducer in the worker
-  //3. illustrate the reducer as a map
-  //4. illustrate the passTrhoughOnException()
-  //5. observers and waitUntil
-  //6. respondWith
-
 </script>
