@@ -1,0 +1,119 @@
+<h1>Hello sunshine</h1>
+<textarea name="editor" id="editor" cols="66" rows="50"></textarea>
+<script type="module" id="editorScript">
+  function maybeError(request) {
+    if (new URL(request.url).pathname === '/error')
+      throw new SyntaxError('bobsibob');
+    return 'world';
+  }
+
+  function maybeErrorHandler(maybeError) {
+    const replace = new Error('this is a public hello world error message.');
+    replace.status = 403;
+    return replace;
+  }
+
+  function errorToResult(error) {
+    return new Response(error.toString() + '\nLog: ' + undefined, {status: error.status || 404});
+  }
+
+  async function helloSunshine() {
+    await new Promise(r => setTimeout(r, 500));
+    return new Response('hello sunshine');
+  }
+
+  async function log(response, hello) {
+    const clone = response.clone();
+    await new Promise(r => setTimeout(r, 500));
+    console.log('logging later ' + clone.status + hello);
+    // fetch('log', data);
+  }
+
+  const listOfActions = [
+    [['request'], () => '1', 'a', 'a'],
+    [['request'], () => {
+      throw new Error('should never happen')
+    }, 'a', 'response'],
+
+    [['request'], maybeError, 'hello', 'maybeError'],
+    [['maybeError'], maybeErrorHandler, 'error'],
+    [['request'], helloSunshine, 'response'],
+    [['error'], errorToResult, 'response', 'response'],
+    [['response', '*hello'], log],
+  ];
+
+  window.url = 'https://vg.no/error';
+</script>
+<pre id="after" hidden>
+
+  //todo 4. highjack the console log of the iframe so to get out the links to the views, if we need/want.
+
+  import {rrListener} from "./ResponseRace.js";
+
+  function debug(msg){
+    window.parent.postMessage(msg, '*');
+  }
+
+  const fetch = Object.assign(
+    new Event('fetch'), {
+      passThroughOnException: () => console.log('passThroughOnException.'),
+      waitUntil: async data => console.log('waitUntil: ', await data),
+      respondWith: async data => console.log('respondWith: ', await data),
+      request: {url: window.url}
+    });
+
+  addEventListener('fetch', e => rrListener(listOfActions, e, debug));
+
+  dispatchEvent(fetch);
+</pre>
+
+<iframe id="runner" hidden></iframe>
+<iframe id="viewer" style="width: 100vw;"></iframe>
+
+<script>
+  (function () {
+
+    const editorScript = document.querySelector('#editorScript');
+    const after = document.querySelector('#after');
+    const runner = document.querySelector('#runner');
+    const viewer = document.querySelector('#viewer');
+
+    const ta = document.querySelector('textarea');
+    ta.value = editorScript.innerText;
+
+    function runInIframe() {
+      //todo do I need to add a code for the viewer?
+      const code = '\n\ndebugger;\n\n' + ta.value + after.innerText;
+      const file = `<html><base href="${location.href}"><script type="module">${code}<` + `/script></html>`;
+      var blob = new Blob([file], {type: "text/html"});
+      var blob_url = URL.createObjectURL(blob);
+      runner.src = blob_url;
+    }
+
+    addEventListener('click', runInIframe);
+    addEventListener('message', e => {
+      window.data = e.data;
+      if (!window.timer)
+        window.timer = setTimeout(function () {
+          viewer.src='https://orstavik.github.io/cloudflare-tutorial/debug.html#'+ window.data;
+          //console.log(window.data);
+          window.timer = undefined;
+        }, 100);
+    });
+  })();
+</script>
+
+//todo the purpose of the reducer pattern is to make the logic more declarative.
+
+//e is the state, but because it is async, we must decorate the state, and not replace it.
+//reducer is a pure(-ish) function. It can get data from outside, and it can use only the data in the incoming state.
+//errors needs to be masked on a reducer/reducer basis.
+
+//the properties of the context object is *both* a property *and* a state marker at the same time.
+//the property is both a point in space and a point in time.
+
+//when more than one promise leads to a property, then first come first serve.
+//This way, reducers can race to reach a point in space/time, and only the first reducer will fill the space/win the race.
+//a reducer will not start until all its marked dependencies are fulfilled.
+
+//This is a time/machine, as much as it is a state.
