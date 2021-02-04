@@ -24,8 +24,6 @@
   }
 
   function computeOM(actions, calls) {
-    //converting the hash to obj
-    // let [actions, calls] = Array.from(JSON.parse(actionsCalls.replaceAll(/[*\w]+/g, s => `"${s}"`).replaceAll(/,,/g, s => ',null,')));
     //getting list of state names
     const states = actions.map(([ps, _, r, e]) => [...ps.map(p => p[0] === '*' ? p.substr(1) : p), r, e]).flat(1).filter((s, i, ar) => ar.indexOf(s) === i);                //filtering out the state names
     //getting list of edges
