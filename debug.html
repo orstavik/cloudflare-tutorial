@@ -35,19 +35,21 @@
   #calls li[status*="b"] {
     --color1: red;
   }
-  #calls li[status*="o"][output^="_observer"] {
+  #calls li[status*="o"][output^="_observer"],
+  #calls li[status*="c"][output^="_observer"],
+  #calls li[status*="e"][output^="_observer"] {
     --color2: lightblue;
   }
-  #calls li[status*="o"][output="response"]:not([status*="b"]), #calls li[status*="e"][error="response"]:not([status*="b"]) {
+  #calls li[status*="o"][output="response"]:not([status*="b"]),
+  #calls li[status*="e"][error="response"]:not([status*="b"]) {
     --color2: red;
   }
-  /*#calls li[status*="X"] {*/
-  /*  --color2: blue;*/
-  /*}*/
-  /*#calls li[status*="z"] {*/
-  /*  background: lightslategray;*/
-  /*}*/
-
+  #calls li[status*="l"][output^="_observer"] {
+    --color2: blue;
+  }
+  #calls li[post-observable] {
+    background: lightgray;
+  }
 
   #state summary {
     color: lightgray;
@@ -128,10 +130,13 @@
   flow-action[resolve][status*="b"][status*="e"] > [type="error"] {--state-color: red;}
   flow-action[resolved][status*="b"][status*="e"] > flow-state[type="error"] {--state-color: red;}
 
-  flow-action[resolved][status*="c"]:not([resolve]) > [type="error"],
-  flow-action[resolved][status*="c"]:not([resolve]) > [type="output"],
-  flow-action[resolved][status*="o"]:not([resolve]) > [type="error"],
-  flow-action[resolved][status*="e"]:not([resolve]) > [type="output"] {--state-color: whitesmoke;}
+  flow-action[resolved][status*="c"]:not([resolve]) > flow-edge[type="error"],
+  flow-action[resolved][status*="c"]:not([resolve]) > flow-edge[type="output"],
+  flow-action[resolved][status*="o"]:not([resolve]) > flow-edge[type="error"],
+  flow-action[resolved][status*="o"][status*="b"]:not([resolve]) > flow-edge[type="output"],
+  flow-action[resolved][status*="e"]:not([resolve]) > flow-edge[type="output"] {
+    --state-color: whitesmoke;
+  }
 
   flow-action[resolve][status*="c"] > [type="output"] {--state-color: black;}
   flow-action[resolved][status*="c"] > flow-state[type="output"] {--state-color: black;}
@@ -168,6 +173,20 @@
     return notReadyStates.length ? idToPosition(notReadyActions, notReadyStates, res, y + 2) : res;
   }
 
+  //todo I can just find the count of the observers, and then i can use a custom rule with nth-child?
+  function findObserversResolution(actions, calls2) {
+    const observers = actions.filter(({output}) => output.startsWith('_observer'));
+    return calls2.findIndex(({action, status}) => {
+      if (!(status.indexOf('c') >= 0 || status.indexOf('o') >= 0 || status.indexOf('e') >= 0))
+        return false;
+      const observerIndex = observers.indexOf(action);
+      if (observerIndex === -1)
+        return false;
+      observers.splice(observerIndex, 1);
+      return !observers.length;
+    });
+  }
+
   function computeOM(actions, calls) {
     actions = actions.map(([inputs, fun, output, error], id) => ({id, inputs, fun, output, error}));
     const states = actions
@@ -177,6 +196,9 @@
     const idToPos = idToPosition(actions, states);
     const [maxX, maxY] = Object.values(idToPos).reduce(([max, may], [x, y]) => [Math.max(x, max), Math.max(y, may)], [0, 0]);
     const calls2 = calls.map(c => c.split('_')).map(([action, status], id) => ({id, action: actions[action], status}));
+    const lastObserver = findObserversResolution(actions, calls2);
+    if (lastObserver !== -1)
+      calls2[lastObserver].status += 'l';
     return [actions, states, idToPos, calls2, maxX, maxY];
   }
 </script>
@@ -203,25 +225,26 @@
     const [xE, yE] = idToPos[error];
 
     const myCalls = calls.filter(({action: a}) => action === a);
-    const invoke = myCalls[0].id;
-    const resolve = myCalls.length === 2 ? myCalls[1].id : myCalls[0].id;
+    const invokeStep = myCalls[0].id;
+    const resolveStep = myCalls.length === 2 ? myCalls[1].id : myCalls[0].id;
+
     const status = (myCalls[0]?.status || '') + (myCalls[1]?.status || '');
-    const isInvoking = invoke === step || undefined;
-    const isResolving = resolve === step || undefined;
-    const resolved = resolve <= step || undefined;
-    const invoked = resolved || invoke <= step || undefined;
-    const pending = step > invoke && step < resolve || undefined;
+    const invoke = invokeStep === step || undefined;
+    const resolve = resolveStep === step || undefined;
+    const resolved = resolveStep <= step || undefined;
+    const invoked = invokeStep <= step || undefined;
+    const awaiting = (step > invokeStep && step < resolveStep) || undefined;
 
     return html`
       <flow-action style=${styleXY(x, y)}
-                   invoked=${invoked} invoke=${isInvoking} pending=${pending} resolve=${isResolving}
+                   invoked=${invoked} invoke=${invoke} awaiting=${awaiting} resolve=${resolve}
                    resolved=${resolved} status=${status}>
 
         <flow-edge type=error style=${styleXY2(xE - x, yE - y)}></flow-edge>
-        <flow-state type=error style=${styleXY2(xE - x, yE - y)} resolve=${resolve} step=${step}></flow-state>
+        <flow-state type=error style=${styleXY2(xE - x, yE - y)} resolve=${resolveStep} step=${step}></flow-state>
 
         <flow-edge type=output style=${styleXY2(xO - x, yO - y)}></flow-edge>
-        <flow-state type=output style=${styleXY2(xO - x, yO - y)} resolve=${resolve} step=${step}></flow-state>
+        <flow-state type=output style=${styleXY2(xO - x, yO - y)} resolve=${resolveStep} step=${step}></flow-state>
 
         ${inputs.map(input => {
           const optional = input[0] === '*' || undefined;
@@ -229,7 +252,7 @@
           const [xI, yI] = idToPos[input];
           return html`
             <flow-edge type=input style=${styleXY2(xI - x, yI - y)} optional=${optional}></flow-edge>
-            <flow-state type=input style=${styleXY2(xI - x, yI - y)} invoke=${invoke} step=${step}
+            <flow-state type=input style=${styleXY2(xI - x, yI - y)} invoke=${invokeStep} step=${step}
                         optional=${optional}></flow-state>
           `;
         })}
@@ -238,10 +261,10 @@
     `;
   }
 
-  function renderCall(id, action, status, step) {
+  function renderCall(id, action, status, step, lastObserverIndex) {
     return html`
       <li id=${"call" + id} action=${action.id} output=${action.output} error=${action.error} status=${status}
-          current=${id === step || undefined}>${id}
+          current=${id === step || undefined} post-observable=${id > lastObserverIndex || undefined}>${id}
       </li>`;
   }
 
@@ -264,16 +287,14 @@
       .map(({action, status}) =>
         status.indexOf('o') >= 0 ? action.output : status.indexOf('e') >= 0 ? action.error : undefined)
       .filter(state => state);
-    //todo better do this in the ResponseRace?
-    // const observers = actions.filter(({output})=>output.startsWith('_observer'));
-    // const resolvedObservers = calls.slice(0, step+1).filter(({action, status})=> action)
+    const lastObserverIndex = calls.findIndex(({status}) => status.indexOf('l') >= 0);
 
     render(document.querySelector('style#dynamic'), html`${`
       :root{ --unit: ${Math.floor(100 / (Math.max(maxY, maxX) + 1))}%}
     `}`);
 
     render(document.querySelector('#calls'), html`
-      ${calls.map(({id, action, status}) => renderCall(id, action, status, step))}
+      ${calls.map(({id, action, status}) => renderCall(id, action, status, step, lastObserverIndex))}
     `);
 
     render(document.querySelector('#container'), html`
@@ -311,7 +332,7 @@
 </script>
 
 <script>
-  let test = `eyJhY3Rpb25zIjpbW1sicmVxdWVzdCJdLCIiLCJhIiwiYSJdLFtbInJlcXVlc3QiXSwiIiwiYSIsInJlc3BvbnNlIl0sW1sicmVxdWVzdCJdLCJtYXliZUVycm9yIiwiaGVsbG8iLCJtYXliZUVycm9yIl0sW1sibWF5YmVFcnJvciJdLCJtYXliZUVycm9ySGFuZGxlciIsImVycm9yIiwiX2Vycm9yMyJdLFtbInJlcXVlc3QiXSwiaGVsbG9TdW5zaGluZSIsInJlc3BvbnNlIiwiX2Vycm9yNCJdLFtbImVycm9yIl0sImVycm9yVG9SZXN1bHQiLCJyZXNwb25zZSIsInJlc3BvbnNlIl0sW1sicmVzcG9uc2UiLCIqaGVsbG8iXSwibG9nIiwiX29ic2VydmVyNiIsIl9lcnJvcjYiXV0sInNlcXVlbmNlIjpbIjBfaW8iLCIxX2MiLCIyX2llIiwiM19pbyIsIjRfaWEiLCI1X2lvIiwiNl9pYSIsIjRfb2IiLCI2X28iXSwidmFyaWFibGVzIjp7InJlcXVlc3QiOnsidXJsIjoiaHR0cHM6Ly92Zy5uby9lcnJvciJ9LCJhIjoiMSIsIm1heWJlRXJyb3IiOnt9LCJlcnJvciI6eyJzdGF0dXMiOjQwM30sInJlc3BvbnNlIjp7fSwiX29ic2VydmVyNiI6bnVsbH19`;
+  let test = `eyJhY3Rpb25zIjpbW1sicmVxdWVzdCJdLCIiLCJhIiwiYSJdLFtbInJlcXVlc3QiXSwiIiwiYSIsInJlc3BvbnNlIl0sW1sicmVxdWVzdCJdLCJ0b29MYXRlIiwidG9vTGF0ZSIsIl9lcnJvcjIiXSxbWyJtYXliZUVycm9yIl0sImxvZyIsIl9vYnNlcnZlcjMiLCJfZXJyb3IzIl0sW1sicmVxdWVzdCJdLCJtYXliZUVycm9yIiwiaGVsbG8iLCJtYXliZUVycm9yIl0sW1sibWF5YmVFcnJvciJdLCJtYXliZUVycm9ySGFuZGxlciIsImVycm9yIiwiX2Vycm9yNSJdLFtbInJlcXVlc3QiXSwiaGVsbG9TdW5zaGluZSIsInJlc3BvbnNlIiwiX2Vycm9yNiJdLFtbImVycm9yIl0sImVycm9yVG9SZXN1bHQiLCJyZXNwb25zZSIsInJlc3BvbnNlIl0sW1sicmVzcG9uc2UiLCIqaGVsbG8iXSwibG9nIiwiX29ic2VydmVyOCIsIl9lcnJvcjgiXV0sInNlcXVlbmNlIjpbIjBfaW8iLCIxX2MiLCIyX2lhIiwiNF9pZSIsIjNfaW8iLCI1X2lvIiwiNl9pYSIsIjdfaW8iLCI4X2lhIiwiNl9vYiIsIjhfbyIsIjJfbyJdLCJ2YXJpYWJsZXMiOnsicmVxdWVzdCI6eyJ1cmwiOiJodHRwczovL3ZnLm5vL2Vycm9yIn0sImEiOiIxIiwibWF5YmVFcnJvciI6e30sIl9vYnNlcnZlcjMiOm51bGwsImVycm9yIjp7InN0YXR1cyI6NDAzfSwicmVzcG9uc2UiOnt9LCJfb2JzZXJ2ZXI4IjpudWxsLCJ0b29MYXRlIjoidGhpcyBmdW5jdGlvbiBydW5zIGFmdGVyIHRoZSBsYXN0IG9ic2VydmVyIn19`;
   location.hash = test;
 </script>
 

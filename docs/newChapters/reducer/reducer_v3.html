@@ -46,6 +46,11 @@
       return new Response('hello sunshine');
     }
 
+    async function tooLate() {
+      await new Promise(r => setTimeout(r, 1000));
+      return "this function runs after the last observer";
+    }
+
     async function log(response, hello) {
       const clone = response.clone();
       await new Promise(r => setTimeout(r, 500));
@@ -58,6 +63,9 @@
       [['request'], () => {
         throw new Error('should never happen')
       }, 'a', 'response'],
+
+      [['request'], tooLate, 'tooLate'],
+      [['maybeError'], console.log],    //observer that will run earlier
 
       [['request'], maybeError, 'hello', 'maybeError'],
       [['maybeError'], maybeErrorHandler, 'error'],
