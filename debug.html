@@ -11,51 +11,16 @@
     return res;
   }
 
-  function statusToProps(status, callId) {
-    if (status === 'i') return {invoke: callId};
-    if (status === 'c') return {resolve: callId, cancel: true};
-    return {
-      resolve: callId,
-      async: status.indexOf('a') >= 0 || undefined,
-      blocked: status.indexOf('b') >= 0 || undefined,
-      isError: status.indexOf('e') >= 0 || undefined,
-      isOutput: status.indexOf('o') >= 0 || undefined
-    };
-  }
-
   function computeOM(actions, calls) {
     const states = actions.map(([ps, _, r, e]) => [...ps.map(p => p[0] === '*' ? p.substr(1) : p), r, e]).flat(1).filter((s, i, ar) => ar.indexOf(s) === i);
     actions = actions.map((action, i) => [i, ...action]);
-
+    //todo make the actions into objects immediately
     const idToPos = idToPosition(actions, states);
     const [maxX, maxY] = Object.values(idToPos).reduce(([max, may], [x, y]) => [Math.max(x, max), Math.max(y, may)], [0, 0]);
     //actions to obj
     actions = actions.map(([id, inputs, fun, output, error]) => ({id, inputs, fun, output, error}));
     //adding call to actions
-    const calls2 = [];
-    for (let callId = 0; callId < calls.length; callId++) {
-      const call = calls[callId];
-      let [actionId, status] = call.split('_');
-      const action = actions[actionId];
-      if (status.indexOf('b') === -1) {
-        const isOutput = status.indexOf('o') >= 0;
-        const isError = status.indexOf('e') >= 0;
-        if (isOutput || isError) {
-          if (action.output.startsWith('_observer'))
-            status += 'x';
-          else if (isOutput && action.output === 'response' || isError && action.error === 'response')
-            status += 'rx';
-        }
-      }
-      calls2.push({id: callId, action: actionId, status});
-      Object.assign(action, statusToProps(status, callId));
-    }
-    //adding last observer X and zzz.
-    const X = calls2.length - 1 - calls2.slice().reverse().findIndex(({status}) => status.indexOf('x') >= 0);
-    calls2[X].status += 'X';
-    for (let i = X + 1; i < calls2.length; i++)
-      calls2[i].status += 'z';
-
+    const calls2 = calls.map(c => c.split('_')).map(([action, status], id) => ({id, action: actions[action], status}));
     //actions {id, inputs, fun, output, error, invoke, resolve, cancel*, async*, isError*, isOutput*, blocked*}
     return [actions, states, idToPos, calls2, maxX, maxY];
   }
@@ -95,18 +60,18 @@
   #calls li[status*="b"] {
     --color1: red;
   }
-  #calls li[status*="x"] {
+  #calls li[status*="o"][output^="_observer"] {
     --color2: lightblue;
   }
-  #calls li[status*="X"] {
-    --color2: blue;
-  }
-  #calls li[status*="r"] {
+  #calls li[status*="o"][output="response"]:not([status*="b"]), #calls li[status*="e"][error="response"]:not([status*="b"]) {
     --color2: red;
   }
-  #calls li[status*="z"] {
-    background: lightslategray;
-  }
+  /*#calls li[status*="X"] {*/
+  /*  --color2: blue;*/
+  /*}*/
+  /*#calls li[status*="z"] {*/
+  /*  background: lightslategray;*/
+  /*}*/
 
   #calls li[current] {
     font-weight: bold;
@@ -118,6 +83,9 @@
   }
   #state summary[active] {
     color: green;
+  }
+  #state summary[prop="request"] {
+    color: blue;
   }
 
   #state {
@@ -224,13 +192,29 @@
     return `--x: ${x}; --y: ${y}; --angle: ${a}deg; --diagonal: ${d};`
   }
 
-  function printAction(action, idToPos, step) {
-    let {id, inputs, fun, output, error, invoke, resolve, cancel, async, isError, isOutput, blocked} = action;
+  function statusToProps(status, callId) {
+    if (status === 'i') return {invoke: callId};
+    if (status === 'c') return {resolve: callId, cancel: true};
+    return {
+      resolve: callId,
+      async: status.indexOf('a') >= 0 || undefined,
+      blocked: status.indexOf('b') >= 0 || undefined,
+      isError: status.indexOf('e') >= 0 || undefined,
+      isOutput: status.indexOf('o') >= 0 || undefined
+    };
+  }
 
+  function printAction(action, idToPos, step, calls) {
+    let {id, inputs, fun, output, error} = action;
     const [x, y] = idToPos[id];
     const [xO, yO] = idToPos[output];
     const [xE, yE] = idToPos[error];
 
+    const myCalls = calls.filter(({action: callAction}) => action === callAction);
+    let props = {};
+    myCalls[0] && Object.assign(props, statusToProps(myCalls[0].status, myCalls[0].id));
+    myCalls[1] && Object.assign(props, statusToProps(myCalls[1].status, myCalls[1].id));
+    let {invoke, resolve, cancel, async, isError, isOutput, blocked} = props;
     const isInvoking = invoke === step || undefined;
     const isResolving = resolve === step || undefined;
     const resolved = resolve <= step || undefined;
@@ -266,7 +250,9 @@
 
   function renderCall(id, action, status, step) {
     return html`
-      <li id=${"call" + id} action=${action} status=${status} current=${id === step || undefined}>${id}</li>`;
+      <li id=${"call" + id} action=${action.id} output=${action.output} error=${action.error} status=${status}
+          current=${id === step || undefined}>${id}
+      </li>`;
   }
 
   function renderStatePlaceHolder(idToPos, state) {
@@ -277,13 +263,18 @@
   function renderStateDetails(prop, value, active) {
     return html`
       <details>
-        <summary active=${active}>${prop}</summary>
+        <summary prop=${prop} active=${active || undefined}>${prop}</summary>
         <pre>${JSON.stringify(value, null, 2)}</pre>
       </details>`;
   }
 
-  //actions {id, inputs, fun, output, error, invoke, resolve}
   function updateView([actions, states, idToPos, calls, maxX, maxY], variables, step) {
+    const setStates = calls
+      .slice(0, step + 1)
+      .map(({action, status}) =>
+        status.indexOf('o') >= 0 ? action.output : status.indexOf('e') >= 0 ? action.error : undefined)
+      .filter(state => state);
+
     render(document.querySelector('style#dynamic'), html`${`
       :root{ --unit: ${Math.floor(100 / (Math.max(maxY, maxX) + 1))}%}
     `}`);
@@ -294,15 +285,11 @@
 
     render(document.querySelector('#container'), html`
       ${states.map(state => renderStatePlaceHolder(idToPos, state))}
-      ${actions.map(action => printAction(action, idToPos, step))}
+      ${actions.map(action => printAction(action, idToPos, step, calls))}
     `);
 
     render(document.querySelector('#state'), html`
-      ${Object.entries(variables).map(([prop, value]) => {
-        const relevantCalls = calls.slice(0, step + 1);
-        const active = relevantCalls.find(call => (actions[call.action].inputs.find(input => input === prop)) || (call.status.indexOf('o') >= 0 && actions[call.action].output === prop) || (call.status.indexOf('e') >= 0 && actions[call.action].error === prop))
-        return renderStateDetails(prop, value, active)
-      })}`);
+      ${Object.entries(variables).map(([prop, value]) => renderStateDetails(prop, value, setStates.includes(prop)))}`);
   }
 
   function init() {
