@@ -1,28 +1,3 @@
-<script>
-  function idToPosition(actions, states, res = {}, y = 0) {
-    //states which is an output in the actions
-    const notReadyStates = states.filter(s => actions.find(({output, error}) => output === s || error === s));
-    //actions which after ready states are removed, still lacks a required parameter
-    const notReadyActions = actions.filter(({id, inputs}) => inputs.filter(p => p[0] !== '*').find(p => notReadyStates.includes(p)));
-    states.filter(s => !notReadyStates.includes(s)).forEach((s, i) => res[s] = [i, y]);
-    actions.filter(a => !notReadyActions.includes(a)).forEach(({id}, i) => res[id] = [i, y + 1]);
-    if (notReadyStates.length)
-      return idToPosition(notReadyActions, notReadyStates, res, y + 2);
-    return res;
-  }
-
-  function computeOM(actions, calls) {
-    actions = actions.map(([inputs, fun, output, error], id) => ({id, inputs, fun, output, error}));
-    const states = actions.map(({inputs, output, error}) => [...inputs, output, error]).flat(1).map(s => s[0] === '*' ? s.substr(1) : s).filter((s, i, ar) => ar.indexOf(s) === i);
-    const idToPos = idToPosition(actions, states);
-    const [maxX, maxY] = Object.values(idToPos).reduce(([max, may], [x, y]) => [Math.max(x, max), Math.max(y, may)], [0, 0]);
-    const calls2 = calls.map(c => c.split('_')).map(([action, status], id) => ({id, action: actions[action], status}));
-    return [actions, states, idToPos, calls2, maxX, maxY];
-  }
-</script>
-
-<style id="dynamic"></style>
-
 <style>
   * {
     margin: 0; padding: 0; box-sizing: border-box;
@@ -42,6 +17,11 @@
     border-right: 2px solid var(--color2);
     border-bottom: 1px solid var(--color2);
     border-left: 1px solid lightgray;
+  }
+  #calls li[current] {
+    font-weight: bold;
+    background: black;
+    color: white;
   }
   #calls li[status*="o"]:not([status*="b"]) {
     --color1: green;
@@ -68,10 +48,6 @@
   /*  background: lightslategray;*/
   /*}*/
 
-  #calls li[current] {
-    font-weight: bold;
-    color: red;
-  }
 
   #state summary {
     color: lightgray;
@@ -147,17 +123,25 @@
     top: 50%;
     left: 50%;
   }
-  flow-action[resolve][blocked] > [type="output"] {--state-color: red;}
-  flow-action[resolved][blocked] > flow-state[type="output"] {--state-color: red;}
-  flow-action[resolve][cancelled] > [type="output"] {--state-color: black;}
-  flow-action[resolved][cancelled] > flow-state[type="output"] {--state-color: black;}
+  flow-action[resolve][status*="b"][status*="o"] > [type="output"] {--state-color: red;}
+  flow-action[resolved][status*="b"][status*="o"] > flow-state[type="output"] {--state-color: red;}
+  flow-action[resolve][status*="b"][status*="e"] > [type="error"] {--state-color: red;}
+  flow-action[resolved][status*="b"][status*="e"] > flow-state[type="error"] {--state-color: red;}
+
+  flow-action[resolved][status*="c"]:not([resolve]) > [type="error"],
+  flow-action[resolved][status*="c"]:not([resolve]) > [type="output"],
+  flow-action[resolved][status*="o"]:not([resolve]) > [type="error"],
+  flow-action[resolved][status*="e"]:not([resolve]) > [type="output"] {--state-color: whitesmoke;}
+
+  flow-action[resolve][status*="c"] > [type="output"] {--state-color: black;}
+  flow-action[resolved][status*="c"] > flow-state[type="output"] {--state-color: black;}
 
 
-  flow-action[resolve][error]:not([blocked]) > [type="error"] {--state-color: orange; --state-border: 2px; background-color: rgba(255, 0, 0, 0.3);}
-  flow-action[resolved][error]:not([blocked]) > flow-state[type="error"] {--state-color: orange; --state-border: 2px;}
+  flow-action[resolve][status*="e"]:not([status*="b"]) > [type="error"] {--state-color: orange; --state-border: 2px; background-color: rgba(255, 0, 0, 0.3);}
+  flow-action[resolved][status*="e"]:not([status*="b"]) > flow-state[type="error"] {--state-color: orange; --state-border: 2px;}
 
-  flow-action[resolve][output]:not([blocked]) > [type="output"] { --state-color: green; background-color: rgba(0, 255, 0, 0.3);}
-  flow-action[resolved][output]:not([blocked]) > flow-state[type="output"] {--state-color: green; --state-border: 2px;}
+  flow-action[resolve][status*="o"]:not([status*="b"]) > [type="output"] { --state-color: green; background-color: rgba(0, 255, 0, 0.3);}
+  flow-action[resolved][status*="o"]:not([status*="b"]) > flow-state[type="output"] {--state-color: green; --state-border: 2px;}
   flow-action[invoke] > [type="input"] {--state-color: green; --state-border: 2px; background-color: rgba(0, 255, 0, 0.3);}
 
   flow-action[resolved]:not([resolve]) > flow-action-placeholder { border-color: lightgrey; }
@@ -167,10 +151,35 @@
 
   flow-edge[optional] {border-top-style: dotted}
 </style>
+<style id="dynamic"></style>
 
 <div id="container"></div>
 <ul id="calls"></ul>
 <div id="state"></div>
+
+<script>
+  function idToPosition(actions, states, res = {}, y = 0) {
+    //states which is an output in the actions
+    const notReadyStates = states.filter(s => actions.find(({output, error}) => output === s || error === s));
+    //actions which after ready states are removed, still lacks a required parameter
+    const notReadyActions = actions.filter(({inputs}) => inputs.filter(p => p[0] !== '*').find(p => notReadyStates.includes(p)));
+    states.filter(s => !notReadyStates.includes(s)).forEach((s, i) => res[s] = [i, y]);
+    actions.filter(a => !notReadyActions.includes(a)).forEach(({id}, i) => res[id] = [i, y + 1]);
+    return notReadyStates.length ? idToPosition(notReadyActions, notReadyStates, res, y + 2) : res;
+  }
+
+  function computeOM(actions, calls) {
+    actions = actions.map(([inputs, fun, output, error], id) => ({id, inputs, fun, output, error}));
+    const states = actions
+      .map(({inputs, output, error}) => [...inputs, output, error]).flat(1)
+      .map(s => s[0] === '*' ? s.substr(1) : s)
+      .filter((s, i, ar) => ar.indexOf(s) === i);
+    const idToPos = idToPosition(actions, states);
+    const [maxX, maxY] = Object.values(idToPos).reduce(([max, may], [x, y]) => [Math.max(x, max), Math.max(y, may)], [0, 0]);
+    const calls2 = calls.map(c => c.split('_')).map(([action, status], id) => ({id, action: actions[action], status}));
+    return [actions, states, idToPos, calls2, maxX, maxY];
+  }
+</script>
 
 <script src="https://unpkg.com/uhtml">/* global uhtml */</script>
 <script>
@@ -187,29 +196,16 @@
     return `--x: ${x}; --y: ${y}; --angle: ${a}deg; --diagonal: ${d};`
   }
 
-  function statusToProps(status, callId) {
-    if (status === 'i') return {invoke: callId};
-    if (status === 'c') return {resolve: callId, cancel: true};
-    return {
-      resolve: callId,
-      async: status.indexOf('a') >= 0 || undefined,
-      blocked: status.indexOf('b') >= 0 || undefined,
-      isError: status.indexOf('e') >= 0 || undefined,
-      isOutput: status.indexOf('o') >= 0 || undefined
-    };
-  }
-
   function printAction(action, idToPos, step, calls) {
     let {id, inputs, fun, output, error} = action;
     const [x, y] = idToPos[id];
     const [xO, yO] = idToPos[output];
     const [xE, yE] = idToPos[error];
 
-    const myCalls = calls.filter(({action: callAction}) => action === callAction);
-    let props = {};
-    myCalls[0] && Object.assign(props, statusToProps(myCalls[0].status, myCalls[0].id));
-    myCalls[1] && Object.assign(props, statusToProps(myCalls[1].status, myCalls[1].id));
-    let {invoke, resolve, cancel, async, isError, isOutput, blocked} = props;
+    const myCalls = calls.filter(({action: a}) => action === a);
+    const invoke = myCalls[0].id;
+    const resolve = myCalls.length === 2 ? myCalls[1].id : myCalls[0].id;
+    const status = (myCalls[0]?.status || '') + (myCalls[1]?.status || '');
     const isInvoking = invoke === step || undefined;
     const isResolving = resolve === step || undefined;
     const resolved = resolve <= step || undefined;
@@ -219,8 +215,7 @@
     return html`
       <flow-action style=${styleXY(x, y)}
                    invoked=${invoked} invoke=${isInvoking} pending=${pending} resolve=${isResolving}
-                   resolved=${resolved}
-                   async=${async} blocked=${blocked} cancelled=${cancel} error=${isError} output=${isOutput}>
+                   resolved=${resolved} status=${status}>
 
         <flow-edge type=error style=${styleXY2(xE - x, yE - y)}></flow-edge>
         <flow-state type=error style=${styleXY2(xE - x, yE - y)} resolve=${resolve} step=${step}></flow-state>
@@ -313,7 +308,7 @@
 </script>
 
 <script>
-  let test = `eyJhY3Rpb25zIjpbW1sicmVxdWVzdCJdLCIiLCJhIiwiYSJdLFtbInJlcXVlc3QiXSwiIiwiYSIsInJlc3BvbnNlIl0sW1sicmVxdWVzdCJdLCJtYXliZUVycm9yIiwiaGVsbG8iLCJtYXliZUVycm9yIl0sW1sibWF5YmVFcnJvciJdLCJtYXliZUVycm9ySGFuZGxlciIsImVycm9yIiwiX2Vycm9yMyJdLFtbInJlcXVlc3QiXSwiaGVsbG9TdW5zaGluZSIsInJlc3BvbnNlIiwiX2Vycm9yNCJdLFtbImVycm9yIl0sImVycm9yVG9SZXN1bHQiLCJyZXNwb25zZSIsInJlc3BvbnNlIl0sW1sicmVzcG9uc2UiLCIqaGVsbG8iXSwibG9nIiwiX29ic2VydmVyNiIsIl9lcnJvcjYiXV0sInNlcXVlbmNlIjpbIjBfaSIsIjBfbyIsIjFfYyIsIjJfaSIsIjJfZSIsIjNfaSIsIjNfbyIsIjRfaSIsIjVfaSIsIjVfbyIsIjZfaSIsIjRfYW9iIiwiNl9hbyJdLCJ2YXJpYWJsZXMiOnsicmVxdWVzdCI6eyJ1cmwiOiJodHRwczovL3ZnLm5vL2Vycm9yIn0sImEiOiIxIiwibWF5YmVFcnJvciI6e30sImVycm9yIjp7InN0YXR1cyI6NDAzfSwicmVzcG9uc2UiOnt9LCJfb2JzZXJ2ZXI2IjpudWxsfX0=`;
+  let test = `eyJhY3Rpb25zIjpbW1sicmVxdWVzdCJdLCIiLCJhIiwiYSJdLFtbInJlcXVlc3QiXSwiIiwiYSIsInJlc3BvbnNlIl0sW1sicmVxdWVzdCJdLCJtYXliZUVycm9yIiwiaGVsbG8iLCJtYXliZUVycm9yIl0sW1sibWF5YmVFcnJvciJdLCJtYXliZUVycm9ySGFuZGxlciIsImVycm9yIiwiX2Vycm9yMyJdLFtbInJlcXVlc3QiXSwiaGVsbG9TdW5zaGluZSIsInJlc3BvbnNlIiwiX2Vycm9yNCJdLFtbImVycm9yIl0sImVycm9yVG9SZXN1bHQiLCJyZXNwb25zZSIsInJlc3BvbnNlIl0sW1sicmVzcG9uc2UiLCIqaGVsbG8iXSwibG9nIiwiX29ic2VydmVyNiIsIl9lcnJvcjYiXV0sInNlcXVlbmNlIjpbIjBfaW8iLCIxX2MiLCIyX2llIiwiM19pbyIsIjRfaWEiLCI1X2lvIiwiNl9pYSIsIjRfb2IiLCI2X28iXSwidmFyaWFibGVzIjp7InJlcXVlc3QiOnsidXJsIjoiaHR0cHM6Ly92Zy5uby9lcnJvciJ9LCJhIjoiMSIsIm1heWJlRXJyb3IiOnt9LCJlcnJvciI6eyJzdGF0dXMiOjQwM30sInJlc3BvbnNlIjp7fSwiX29ic2VydmVyNiI6bnVsbH19`;
   location.hash = test;
 </script>
 
