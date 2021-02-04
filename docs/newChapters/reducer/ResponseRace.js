@@ -1,3 +1,4 @@
+
 //optimizations.
 // 1. optimize actions run. Remove from the list the actions already processed?
 // 1. optimize variable resolution. This is done from scratch again and again.
@@ -19,17 +20,17 @@ function syntaxCheck(actions) {
   return {hasResponse, observers};
 }
 
+function checkOutObserver(unresolvedObservers, actionId) {
+  const index = unresolvedObservers.indexOf(actionId);
+  if (index !== -1)
+    unresolvedObservers.splice(index, 1);
+  return !unresolvedObservers.length;
+}
+
 function setDynamicVariable(frame, prop, value, actionId) {
   frame.variables[prop] = value;
-  if (prop === 'response' && frame.resolverResponse)
-    frame.resolverResponse(value);
-  if (frame.unresolvedObservers) {
-    const index = frame.unresolvedObservers.indexOf(actionId);
-    if(index !== -1)
-      frame.unresolvedObservers.splice(index, 1);
-    if(!frame.unresolvedObservers.length)
-      frame.resolverObservers(true);
-  }
+  prop === 'response' && frame.resolverResponse && frame.resolverResponse(value);
+  frame.unresolvedObservers && checkOutObserver(frame.unresolvedObservers, actionId) && frame.resolverObservers(true);
 }
 
 //returns either two Promises or either only success(not a Promise) or error (not a Promise)
@@ -48,13 +49,13 @@ function runFun(fun, variables, params) {
   }
 }
 
-function doDebug(debug, actions, variables, sequence) {
+function doDebug(debug, actions, context, sequence) {
   !(debug instanceof Function) && (debug = console.log);
   actions = actions.map(([params, fun, output, error]) => [params, fun.name, output, error]);//be careful not to mutate actions here..
-  const state = {};
-  for (let [key, value] of Object.entries(variables))
-    state[key] = value === undefined ? null : value;
-  debug(btoa(JSON.stringify({actions, sequence, variables: state})));
+  const variables = {...context};
+  for (let [key, value] of Object.entries(context))
+    variables[key] = value === undefined ? null : value;
+  debug(btoa(JSON.stringify({actions, sequence, variables})));
 }
 
 function run(frame) {
