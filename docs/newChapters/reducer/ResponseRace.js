@@ -1,29 +1,35 @@
-
 //optimizations.
 // 1. optimize actions run. Remove from the list the actions already processed?
 // 1. optimize variable resolution. This is done from scratch again and again.
 
 //att! mutates the actions list!
 function syntaxCheck(actions) {
-  let hasResponse, hasObservers;
+  let hasResponse, observers = [];
   for (let i = 0; i < actions.length; i++) {
     let action = actions[i];
-    if (action[2] === 'response') hasResponse = true;
-    if (action.length === 2) (hasObservers = true), action.push('_observer' + i), action.push('_error' + i);
-    else if (action.length === 3) action.push('_error' + i);
+    if (action[2] === 'response')
+      hasResponse = true;
+    if (action.length === 2) {
+      observers.push(i);
+      action.push('_observer' + i);
+      action.push('_error' + i);
+    } else if (action.length === 3)
+      action.push('_error' + i);
   }
-  return {hasResponse, hasObservers};
+  return {hasResponse, observers};
 }
 
-function setDynamicVariable(frame, prop, value) {
+function setDynamicVariable(frame, prop, value, actionId) {
   frame.variables[prop] = value;
-  //todo the promises here are broken..
   if (prop === 'response' && frame.resolverResponse)
     frame.resolverResponse(value);
-  //todo the check below is broken
-  if (frame.resolverObservers && prop.startsWith('_observer') && !frame.actions.find(action => action[2].startsWith('_observer') && action.length < 6))
-    frame.resolverObservers(true);
-  return true;
+  if (frame.unresolvedObservers) {
+    const index = frame.unresolvedObservers.indexOf(actionId);
+    if(index !== -1)
+      frame.unresolvedObservers.splice(index, 1);
+    if(!frame.unresolvedObservers.length)
+      frame.resolverObservers(true);
+  }
 }
 
 //returns either two Promises or either only success(not a Promise) or error (not a Promise)
@@ -68,30 +74,29 @@ function run(frame) {
     //todo I think we need to doDebug here too.. #1 // debug && doDebug(debug, actions, variables, sequence);
     const result = runFun(fun, variables, params);
     if (result.success instanceof Promise) {
+      sequence[sequence.length - 1] += 'a'; //todo
       //todo I think we need to doDebug here too.. #2 // debug && doDebug(debug, actions, variables, sequence);
       result.success.then(s => {
         if (variables[prop])                //if the property is already filled, and the set is blocked, then no new frame will run.
-          return sequence.push(i + '_aob'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
-        sequence.push(i + '_ao');
-        setDynamicVariable(frame, prop, s);
+          return sequence.push(i + '_ob'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
+        sequence.push(i + '_o');
+        setDynamicVariable(frame, prop, s, i);
         run(frame);
       });
       result.error.then(e => {
         if (variables[propError])           //if the property is already filled, and the set is blocked, then no new frame will run.
-          return sequence.push(i + '_aeb'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
-        sequence.push(i + '_ae');
-        setDynamicVariable(frame, propError, e);
+          return sequence.push(i + '_eb'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
+        sequence.push(i + '_e');
+        setDynamicVariable(frame, propError, e, i);
         run(frame);
       });
     } else if ('success' in result) {
-      //todo here i can reset the sequence push         += o
-      sequence.push(i + '_o');
-      setDynamicVariable(frame, prop, result.success);
+      sequence[sequence.length - 1] += 'o'; //todo
+      setDynamicVariable(frame, prop, result.success, i);
       return run(frame);    //TCO
     } else /*if ('error' in result)*/ {
-      //todo here i can reset the sequence push         += e
-      sequence.push(i + '_e');
-      setDynamicVariable(frame, propError, result.error);
+      sequence[sequence.length - 1] += 'e';  //todo
+      setDynamicVariable(frame, propError, result.error, i);
       return run(frame); //TCO
     }
   }
@@ -102,21 +107,31 @@ function run(frame) {
 }
 
 export function startStack(actions, startState, debug) {
-  const {hasResponse, hasObservers} = syntaxCheck(actions);
-  let resolverResponse, resolverObservers;
-  const response = hasResponse && new Promise(r => resolverResponse = r);
-  const observers = hasObservers && new Promise(r => resolverObservers = r);
-  //todo I should filter out the needed observers from the actions at the start.
-  const frame = {actions, variables: startState, debug, resolverResponse, resolverObservers, sequence: []};
+  const {hasResponse, observers} = syntaxCheck(actions);
+  const frame = {actions, variables: startState, debug, sequence: []};
   run(frame);
-  //todo, run the first frame without having the response and observerPromise.
-  //todo If there are no awaiting observers and the response is ready, then return that.
-  return {response, observers};
+  let response = undefined;
+  if ('response' in frame.variables) {
+    response = frame.variables.response;
+  } else if (hasResponse) {
+    let resolverResponse;
+    response = new Promise(r => resolverResponse = r);
+    frame.resolverResponse = resolverResponse;
+  }
+  let observer = undefined;
+  const unresolvedObservers = observers.filter(obsNum => !("_observer" + obsNum in frame.variables || "_error" + obsNum in frame.variables));
+  if (unresolvedObservers.length) {
+    let resolverObservers;
+    observer = new Promise(r => resolverObservers = r);
+    frame.resolverObservers = resolverObservers;
+    frame.unresolvedObservers = unresolvedObservers;
+  }
+  return {response, observer};
 }
 
 export function rrListener(actions, e, debug) {
-  const {response, observers} = startStack(actions, {request: e.request}, debug);
-  observers && e.waitUntil(observers);
+  const {response, observer} = startStack(actions, {request: e.request}, debug);
+  observer && e.waitUntil(observer);
   if (response === undefined)
     return;
   if (response instanceof Error)

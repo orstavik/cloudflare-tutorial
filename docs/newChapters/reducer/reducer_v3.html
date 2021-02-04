@@ -93,6 +93,7 @@
 
   function debug(msg){
     window.doMutationCheck && checkMutations(msg);
+    console.log(msg);
     window.parent.postMessage(msg, '*');
   }
 

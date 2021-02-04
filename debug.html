@@ -264,6 +264,9 @@
       .map(({action, status}) =>
         status.indexOf('o') >= 0 ? action.output : status.indexOf('e') >= 0 ? action.error : undefined)
       .filter(state => state);
+    //todo better do this in the ResponseRace?
+    // const observers = actions.filter(({output})=>output.startsWith('_observer'));
+    // const resolvedObservers = calls.slice(0, step+1).filter(({action, status})=> action)
 
     render(document.querySelector('style#dynamic'), html`${`
       :root{ --unit: ${Math.floor(100 / (Math.max(maxY, maxX) + 1))}%}
