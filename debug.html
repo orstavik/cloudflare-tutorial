@@ -1,27 +1,22 @@
 <script>
   function idToPosition(actions, states, res = {}, y = 0) {
     //states which is an output in the actions
-    const notReadyStates = states.filter(s => actions.find(([i, p, f, r, e]) => r === s || e === s));
+    const notReadyStates = states.filter(s => actions.find(({output, error}) => output === s || error === s));
     //actions which after ready states are removed, still lacks a required parameter
-    const notReadyActions = actions.filter(([_, params]) => params.filter(p => p[0] !== '*').find(p => notReadyStates.includes(p)));
+    const notReadyActions = actions.filter(({id, inputs}) => inputs.filter(p => p[0] !== '*').find(p => notReadyStates.includes(p)));
     states.filter(s => !notReadyStates.includes(s)).forEach((s, i) => res[s] = [i, y]);
-    actions.filter(a => !notReadyActions.includes(a)).forEach(([id], i) => res[id] = [i, y + 1]);
+    actions.filter(a => !notReadyActions.includes(a)).forEach(({id}, i) => res[id] = [i, y + 1]);
     if (notReadyStates.length)
       return idToPosition(notReadyActions, notReadyStates, res, y + 2);
     return res;
   }
 
   function computeOM(actions, calls) {
-    const states = actions.map(([ps, _, r, e]) => [...ps.map(p => p[0] === '*' ? p.substr(1) : p), r, e]).flat(1).filter((s, i, ar) => ar.indexOf(s) === i);
-    actions = actions.map((action, i) => [i, ...action]);
-    //todo make the actions into objects immediately
+    actions = actions.map(([inputs, fun, output, error], id) => ({id, inputs, fun, output, error}));
+    const states = actions.map(({inputs, output, error}) => [...inputs, output, error]).flat(1).map(s => s[0] === '*' ? s.substr(1) : s).filter((s, i, ar) => ar.indexOf(s) === i);
     const idToPos = idToPosition(actions, states);
     const [maxX, maxY] = Object.values(idToPos).reduce(([max, may], [x, y]) => [Math.max(x, max), Math.max(y, may)], [0, 0]);
-    //actions to obj
-    actions = actions.map(([id, inputs, fun, output, error]) => ({id, inputs, fun, output, error}));
-    //adding call to actions
     const calls2 = calls.map(c => c.split('_')).map(([action, status], id) => ({id, action: actions[action], status}));
-    //actions {id, inputs, fun, output, error, invoke, resolve, cancel*, async*, isError*, isOutput*, blocked*}
     return [actions, states, idToPos, calls2, maxX, maxY];
   }
 </script>
