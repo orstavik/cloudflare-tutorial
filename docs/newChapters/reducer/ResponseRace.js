@@ -15,10 +15,7 @@ function syntaxCheck(actions) {
   return {hasResponse, hasObservers};
 }
 
-function setDynamicVariable(frame, prop, value, seq) {
-  if (frame.variables[prop])    //if the property is already filled, and the set is blocked, then no new frame will run.
-    return frame.sequence.push(seq + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
-  frame.sequence.push(seq);
+function setDynamicVariable(frame, prop, value) {
   frame.variables[prop] = value;
   //todo the promises here are broken..
   if (prop === 'response' && frame.resolverResponse)
@@ -58,24 +55,44 @@ function run(frame) {
   const {actions, variables, debug, sequence} = frame;
   debug && doDebug(debug, actions, variables, sequence);
   for (let i = 0; i < actions.length; i++) {
-    if (sequence.includes(i + '_i') || sequence.includes(i + '_c')) //already invoked/cancelled
+    if (sequence.find(call => call.startsWith(i + '_'))) //action already run
       continue;
-    let [args, fun, prop, propError] = actions[i];
-    if (args.find(arg => arg[0] !== '*' && !(arg in variables)))//find unset, not-* arg
-      continue;
-    if (prop in variables) {//goal completed, cancelling
+    let [params, fun, prop, propError] = actions[i];
+    if (prop in variables) {                             //goal completed, cancelling action
       sequence.push(i + '_c');
       continue;
     }
-    sequence.push(i + '_i');       //adding invoked
-    const result = runFun(fun, variables, args);
+    if (params.find(arg => arg[0] !== '*' && !(arg in variables)))  //action not ready: find unset, not-* arg
+      continue;
+    sequence.push(i + '_i'); //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
+    //todo I think we need to doDebug here too.. #1 // debug && doDebug(debug, actions, variables, sequence);
+    const result = runFun(fun, variables, params);
     if (result.success instanceof Promise) {
-      result.success.then(s => setDynamicVariable(frame, prop, s, i + '_ao') && run(frame));
-      result.error.then(e => setDynamicVariable(frame, propError, e, i + '_ae') && run(frame));
+      //todo I think we need to doDebug here too.. #2 // debug && doDebug(debug, actions, variables, sequence);
+      result.success.then(s => {
+        if (variables[prop])                //if the property is already filled, and the set is blocked, then no new frame will run.
+          return sequence.push(i + '_aob'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
+        sequence.push(i + '_ao');
+        setDynamicVariable(frame, prop, s);
+        run(frame);
+      });
+      result.error.then(e => {
+        if (variables[propError])           //if the property is already filled, and the set is blocked, then no new frame will run.
+          return sequence.push(i + '_aeb'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
+        sequence.push(i + '_ae');
+        setDynamicVariable(frame, propError, e);
+        run(frame);
+      });
     } else if ('success' in result) {
-      return setDynamicVariable(frame, prop, result.success, i + '_o') && run(frame);    //TCO
+      //todo here i can reset the sequence push         += o
+      sequence.push(i + '_o');
+      setDynamicVariable(frame, prop, result.success);
+      return run(frame);    //TCO
     } else /*if ('error' in result)*/ {
-      return setDynamicVariable(frame, propError, result.error, i + '_e') && run(frame); //TCO
+      //todo here i can reset the sequence push         += e
+      sequence.push(i + '_e');
+      setDynamicVariable(frame, propError, result.error);
+      return run(frame); //TCO
     }
   }
   //todo if no action is added to the initial input, we have a dead end. This can be syntax checked.
