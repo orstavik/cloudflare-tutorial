@@ -1,3 +1,4 @@
+
 //optimizations.
 // 1. optimize actions run. Remove from the list the actions already processed?
 // 1. optimize variable resolution. This is done from scratch again and again.
@@ -19,8 +20,10 @@ function setDynamicVariable(frame, prop, value, seq) {
     return frame.sequence.push(seq + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
   frame.sequence.push(seq);
   frame.variables[prop] = value;
+  //todo the promises here are broken..
   if (prop === 'response' && frame.resolverResponse)
     frame.resolverResponse(value);
+  //todo the check below is broken
   if (frame.resolverObservers && prop.startsWith('_observer') && !frame.actions.find(action => action[2].startsWith('_observer') && action.length < 6))
     frame.resolverObservers(true);
   return true;
@@ -86,9 +89,11 @@ export function startStack(actions, startState, debug) {
   let resolverResponse, resolverObservers;
   const response = hasResponse && new Promise(r => resolverResponse = r);
   const observers = hasObservers && new Promise(r => resolverObservers = r);
-  //todo it would be possible to get the count and variables from the actions object. but much slower. so, we keep it.
+  //todo I should filter out the needed observers from the actions at the start.
   const frame = {actions, variables: startState, debug, resolverResponse, resolverObservers, sequence: []};
   run(frame);
+  //todo, run the first frame without having the response and observerPromise.
+  //todo If there are no awaiting observers and the response is ready, then return that.
   return {response, observers};
 }
 

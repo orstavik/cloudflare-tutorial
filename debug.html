@@ -24,10 +24,8 @@
   }
 
   function computeOM(actions, calls) {
-    //getting list of state names
-    const states = actions.map(([ps, _, r, e]) => [...ps.map(p => p[0] === '*' ? p.substr(1) : p), r, e]).flat(1).filter((s, i, ar) => ar.indexOf(s) === i);                //filtering out the state names
-    //getting list of edges
-    actions = actions.map((action, i) => [i, ...action]); //adding the id of the action at the beginning
+    const states = actions.map(([ps, _, r, e]) => [...ps.map(p => p[0] === '*' ? p.substr(1) : p), r, e]).flat(1).filter((s, i, ar) => ar.indexOf(s) === i);
+    actions = actions.map((action, i) => [i, ...action]);
 
     const idToPos = idToPosition(actions, states);
     const [maxX, maxY] = Object.values(idToPos).reduce(([max, may], [x, y]) => [Math.max(x, max), Math.max(y, may)], [0, 0]);
@@ -37,11 +35,26 @@
     const calls2 = [];
     for (let callId = 0; callId < calls.length; callId++) {
       const call = calls[callId];
-      const [actionId, status] = call.split('_');
+      let [actionId, status] = call.split('_');
       const action = actions[actionId];
-      calls2.push({id: callId, action: actionId, fun: action.fun, status});
+      if (status.indexOf('b') === -1) {
+        const isOutput = status.indexOf('o') >= 0;
+        const isError = status.indexOf('e') >= 0;
+        if (isOutput || isError) {
+          if (action.output.startsWith('_observer'))
+            status += 'x';
+          else if (isOutput && action.output === 'response' || isError && action.error === 'response')
+            status += 'rx';
+        }
+      }
+      calls2.push({id: callId, action: actionId, status});
       Object.assign(action, statusToProps(status, callId));
     }
+    //adding last observer X and zzz.
+    const X = calls2.length - 1 - calls2.slice().reverse().findIndex(({status}) => status.indexOf('x') >= 0);
+    calls2[X].status += 'X';
+    for (let i = X + 1; i < calls2.length; i++)
+      calls2[i].status += 'z';
 
     //actions {id, inputs, fun, output, error, invoke, resolve, cancel*, async*, isError*, isOutput*, blocked*}
     return [actions, states, idToPos, calls2, maxX, maxY];
@@ -57,16 +70,47 @@
 
   #calls {
     position: absolute;
-    top: min(10vw, 10vh);
-    right: min(10vw, 10vh);
-    height: min(20vw, 20vh);
-    overflow: scroll;
+    top: 0;
+    left: calc(var(--unit) * 0.25);
   }
   #calls li {
-    position: relative;
+    display: inline;
+    padding: 0 0 1em 0.2em;
+    --color1: transparent;
+    --color2: transparent;
+    text-decoration: underline var(--color1);
+    border-right: 2px solid var(--color2);
+    border-bottom: 1px solid var(--color2);
+    border-left: 1px solid lightgray;
   }
+  #calls li[status*="o"]:not([status*="b"]) {
+    --color1: green;
+  }
+  #calls li[status*="e"]:not([status*="b"]) {
+    --color1: orange;
+  }
+  #calls li[status*="c"] {
+    --color1: black;
+  }
+  #calls li[status*="b"] {
+    --color1: red;
+  }
+  #calls li[status*="x"] {
+    --color2: lightblue;
+  }
+  #calls li[status*="X"] {
+    --color2: blue;
+  }
+  #calls li[status*="r"] {
+    --color2: red;
+  }
+  #calls li[status*="z"] {
+    background: lightslategray;
+  }
+
   #calls li[current] {
     font-weight: bold;
+    color: red;
   }
 
   #state summary {
@@ -220,11 +264,9 @@
     `;
   }
 
-  function renderCall(id, action, status, i, step, fun) {
+  function renderCall(id, action, status, step) {
     return html`
-      <li id=${"call" + id} action=${action} status=${status} current=${i === step || undefined}>
-        ${fun || 'fun' + action}>${status}
-      </li>`;
+      <li id=${"call" + id} action=${action} status=${status} current=${id === step || undefined}>${id}</li>`;
   }
 
   function renderStatePlaceHolder(idToPos, state) {
@@ -247,7 +289,7 @@
     `}`);
 
     render(document.querySelector('#calls'), html`
-      ${calls.map(({id, action, fun, status}, i) => renderCall(id, action, status, i, step, fun))}
+      ${calls.map(({id, action, status}) => renderCall(id, action, status, step))}
     `);
 
     render(document.querySelector('#container'), html`
@@ -265,7 +307,7 @@
 
   function init() {
     if (!location.hash) return;
-    const {actions, sequence,variables} = JSON.parse(atob(location.hash.substr(1)));
+    const {actions, sequence, variables} = JSON.parse(atob(location.hash.substr(1)));
     window.variables = variables;
     model = computeOM(actions, sequence);
     step = 0;
