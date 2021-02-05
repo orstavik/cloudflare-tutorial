@@ -32,28 +32,27 @@ function doDebug(debug, actions, context, sequence) {           //todo, this fun
   const variables = {...context};
   for (let [key, value] of Object.entries(context))
     variables[key] = value === undefined ? null : value;
-  const debugObj = {actions, sequence, variables};
+  const debugObj = {actions, sequence: sequence.split(':').slice(1), variables};     //todo pass the sequence as a string, not an array
   debug(btoa(JSON.stringify(debugObj)));
 }
 
-function nextReadyAction(actions, sequence, variables) {
+function nextReadyAction(actions, frame, variables) {
   for (let action of actions) {
-    if (sequence.find(call => call.startsWith(action[0] + '_'))) continue;  //action already invoked
+    if (frame.sequence.indexOf(`:${action[0]}_`) >= 0) continue;    //action already invoked
     if (action[1].find(p => !(p[0] === '*' || p in variables)))
       //sequence.push(action[0] + '_waitForIt');
       // todo should we illustrate when a function is not yet called? This can be discovered implicitly by reviewing the call stack
       continue;   //required arguments not yet ready
     if (action[3] in variables) {                                           //goal completed, cancelling action
       // todo It is possible to discover that a call has been made by reviewing the call stack.. move this complexity into the view?
-      sequence.push(action[0] + '_c');
+      frame.sequence += `:${action[0]}_c`;
       continue;
     }
     return action;                                                          //else, action is ready
   }
 }
 
-function setVariable(id, type, prop, val, frame) {
-  frame.sequence.push(id + type);
+function setVariable(id, prop, val, frame) {
   frame.variables[prop] = val;
   frame.afterSet && frame.afterSet(frame, prop, val, id);
 }
@@ -62,34 +61,35 @@ function run(frame) {
   const {actions, variables, debug, sequence} = frame;
   debug && doDebug(debug, actions, variables, sequence);
   let action;
-  while (action = nextReadyAction(actions, sequence, variables)) {
+  while (action = nextReadyAction(actions, frame, variables)) {
     let [id, params, fun, prop, propError] = action;
-    sequence.push(id + '_i'); //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
+    frame.sequence += ':'+id + '_i'; //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
     //todo I think we need to doDebug here too.. #1 // debug && doDebug(debug, actions, variables, sequence);
     //todo make a method, beforeInvoke
     const result = runFun(fun, variables, params);
     if (result.success instanceof Promise) {
-      sequence[sequence.length - 1] += 'a'; //todo
+      frame.sequence += 'a'; 
       //todo I think we need to doDebug here too.. #2 // debug && doDebug(debug, actions, variables, sequence);
       result.success.then(val => {
-        const type = '_o';
-        if (variables[prop])                //if the property is already filled, and the set is blocked, then no new frame will run.
-          return sequence.push(id + type + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
-        setVariable(id, type, prop, val, frame);
+        frame.sequence += `:${id}_o`;
+        if (variables[prop])
+          return frame.sequence += 'b';
+        setVariable(id, prop, val, frame);
         run(frame);
       });
       result.error.then(val => {
-        if (variables[propError])           //if the property is already filled, and the set is blocked, then no new frame will run.
-          return sequence.push(id + '_e' + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
-        setVariable(id, '_e', propError, val, frame);
+        frame.sequence += `:${id}_e`;
+        if (variables[propError])
+          return frame.sequence += 'b';
+        setVariable(id, propError, val, frame);
         run(frame);
       });
     } else if ('success' in result) {
-      sequence.pop();
-      setVariable(id, '_io', prop, result.success, frame);
+      frame.sequence += 'o';
+      setVariable(id, prop, result.success, frame);
     } else /*if ('error' in result)*/ {
-      sequence.pop();
-      setVariable(id, '_ie', propError, result.error, frame);
+      frame.sequence += 'e';
+      setVariable(id, propError, result.error, frame);
     }
   }
   //todo if no action is added to the initial input, we have a dead end. This can be syntax checked.
@@ -106,7 +106,7 @@ function afterSet(frame, prop, val, i) {
 export function startStack(actions, startState, debug) {
   actions = normalizeIdObserversMissingErrors(actions); //todo moved up init time
 
-  const frame = {actions, variables: startState, debug, sequence: [], sequenceActions: [], afterSet}; //todo move afterSet to inside the response/observers check
+  const frame = {actions, variables: startState, debug, sequence: '', afterSet}; //todo move afterSet to inside the response/observers check
   run(frame);
   let response = undefined;
   if ('response' in frame.variables) {
