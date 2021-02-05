@@ -1,31 +1,25 @@
-//returns either two Promises or either only success(not a Promise) or error (not a Promise)
-function runFun(fun, variables, params) {
-  try {
-    const args = params.map(p => variables[p[0] === '*' ? p.substr(0) : p]);  //optimize argument resolution? Maybe not..
-    const res = fun(...args);
-    if (!(res instanceof Promise))
-      return {success: res};
-    let successResolver, errorResolver;
-    const success = new Promise(r => successResolver = r), error = new Promise(r => errorResolver = r);
-    res.then(v => successResolver(v), e => errorResolver(e));
-    return {success, error};
-  } catch (err) {
-    return {error: err};
-  }
-}
-
 function firstReadyAction(frame) {
-  for (let action of frame.actions) {
-    if (frame.sequence.indexOf(`:${action[0]}_`) >= 0) continue;          //action already invoked
-    if (action[1].find(p => !(p[0] === '*' || p in frame.variables)))     //required arguments not yet ready
-      //frame.sequence += `:${action[0]}_waiting...`; // todo illustrates when a function could have been called, but whose arguments was not ready.
+  main: for (let action of frame.actions) {
+    let [id, params, _, output] = action;
+    if (frame.sequence.indexOf(`:${id}_`) >= 0)            //action already invoked
       continue;
-    if (action[3] in frame.variables) {               //goal completed, cancelling action
-      frame.sequence += `:${action[0]}_c`;            // todo this and _waiting can be discovered from analysis of the actions and callSequence..
+    if (output in frame.variables) {                       //goal completed, cancelling action
+      frame.sequence += `:${id}_c`;     //todo _waiting can be read through analysis of actions and callSequence..
       continue;
     }
-    return action;                                    //else, action is ready
+    const args = [];
+    for (let p of params) {
+      if (p[0] === '*')
+        args.push(frame.variables[p.substr(1)]);
+      else if (p in frame.variables)
+        args.push(frame.variables[p]);
+      else
+        //frame.sequence += `:${action[0]}_waiting...`;   // todo illustrates when a function could have been called, but whose arguments was not ready.
+        continue main;                                    //required arguments not yet ready
+    }
+    return {action, args};                                //else, action is ready
   }
+  return {};
 }
 
 function asyncActionReturns(frame, callTxt, key, val) {
@@ -41,17 +35,25 @@ function setValue(frame, callTxt, key, val) {
 }
 
 function run(frame) {
-  //frame.sequence += `:${id}_i`; //todo
+  //todo
+  //frame.sequence += `:${id}_i`;
   //(re-)start state machine. This is a good sign when the state machine is triggered, either by the initial event, or by an async callback
   // this will give us a good marker in the call sequence to draw a static state for the whole system.
   // Here we can illustrate which edges have been active and which functions that have run and which functions and states are missing at this point.
   // this would be a good point to jump between too. Illustrate which events happen "simultaneously", and which steps that are slow.
   //if we do this, then I don't see the point in having a preFrame callback.
-  for (let action; action = firstReadyAction(frame);) {
-    const [id, params, fun, output, error] = action;
-    frame.sequence += `:${id}_i`; //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
+  for (let action, args; {action, args} = firstReadyAction(frame), action;) {
+    let [id, _, fun, output, error] = action;
     frame.preInvoke?.call(frame);
-    const result = runFun(fun, frame.variables, params);
+
+    let result;
+    for (let operator in frame.operators) {
+      if (output.startsWith(operator)) {
+        result = frame.operators[operator](fun, args, frame, id);
+        output = output.substr(operator.length);
+        break;
+      }
+    }
     if (result.success instanceof Promise) {
       frame.sequence += 'a';
       result.success.then(val => asyncActionReturns(frame, `:${id}_o`, output, val));
@@ -83,14 +85,13 @@ function frameToString({actions, variables: context, sequence}) {
   const variables = {};
   for (let key in context)
     variables[key] = context[key] === undefined ? null : context[key];
-  // sequence = sequence.split(':').slice(1);                         //todo pass the sequence as a string, not an array
   return btoa(JSON.stringify({actions, sequence, variables}));
 }
 
-export function startStack(actions, variables, debug) {
+export function startStack(actions, operators, variables, debug) {
   debug && (debug = (debug instanceof Function ? debug : console.log)); //normalize debug
   const frame = {
-    actions, variables, sequence: '', preInvoke: function () {
+    actions, operators, variables, sequence: '', preInvoke: function () {
       debug(frameToString(frame));
     }
   };
@@ -115,12 +116,52 @@ export function startStack(actions, variables, debug) {
   return {response, observer};
 }
 
-//1. syntax check for dead end states. We do this by checking each action. If the action is missing a required state (ie. a required state is neither an output of any other action, or a start variable), then we remove this action. We repeat this function recursively until there are no such actions removed in an entire pass). This will remove any loose ends. This can be done at compile time.
+// todo
+// 1. syntax check for dead end states. We do this by checking each action. If the action is missing a required state (ie. a required state is neither an output of any other action, or a start variable), then we remove this action. We repeat this function recursively until there are no such actions removed in an entire pass). This will remove any loose ends. This can be done at compile time.
 //2. if this removes response, or any observers, then this will of course clear the way for any errors.
+
+
+//returns either two Promises or either only success(not a Promise) or error (not a Promise)
+function runFun(fun, args, frame, id) {
+  frame.sequence += `:${id}_i`; //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
+  try {
+    const res = fun(...args);
+    if (!(res instanceof Promise))
+      return {success: res};
+    let successResolver, errorResolver;
+    const success = new Promise(r => successResolver = r), error = new Promise(r => errorResolver = r);
+    res.then(v => successResolver(v), e => errorResolver(e));
+    return {success, error};
+  } catch (err) {
+    return {error: err};
+  }
+}
+
+function getOperators() {
+  const cache = {};
+  const operators = {
+    '': runFun,
+    '!': function (fun, args, frame, id) {
+      const key = JSON.stringify(args.length === 1 ? args[0] : args);
+      if (key.length === Infinity) //todo what is the potential problems here??
+        return runFun(fun, args);
+      if (key in cache) {
+        frame.sequence += `:${id}_!o`;  //marking the data as coming out of the cache.
+        return cache[key];
+      } else {
+        const result = runFun(fun, args);
+        frame.sequence += `:${id}_!i`;   //marking the data as coming out of the cache.
+        return cache[key] = result;
+      }
+    }
+  }
+  // must be sorted longest operator first..
+  return Object.fromEntries(Object.entries(operators).sort(([a], [b]) => a.length > b.length ? -1 : a.length === b.length ? 0 : 1));
+}
 
 export function rrListener(actions, e, debug) {
   actions = normalizeIdObserversMissingErrors(actions); //todo moved up init time
-  const {response, observer} = startStack(actions, {request: e.request}, debug);
+  const {response, observer} = startStack(actions, getOperators(), {request: e.request}, debug);
   observer && e.waitUntil(observer);
   if (response === undefined)
     return;
