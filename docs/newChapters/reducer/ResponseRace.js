@@ -39,13 +39,23 @@ function doDebug(debug, actions, context, sequence) {           //todo, this fun
 function nextReadyAction(actions, sequence, variables) {
   for (let action of actions) {
     if (sequence.find(call => call.startsWith(action[0] + '_'))) continue;  //action already invoked
-    if (action[1].find(p => !(p[0] === '*' || p in variables))) continue;   //required arguments not yet ready //todo here, it is possible to illustrate that an await has been called.
+    if (action[1].find(p => !(p[0] === '*' || p in variables)))
+      //sequence.push(action[0] + '_waitForIt');
+      // todo should we illustrate when a function is not yet called? This can be discovered implicitly by reviewing the call stack
+      continue;   //required arguments not yet ready
     if (action[3] in variables) {                                           //goal completed, cancelling action
+      // todo It is possible to discover that a call has been made by reviewing the call stack.. move this complexity into the view?
       sequence.push(action[0] + '_c');
       continue;
     }
     return action;                                                          //else, action is ready
   }
+}
+
+function setVariable(id, type, prop, val, frame) {
+  frame.sequence.push(id + type);
+  frame.variables[prop] = val;
+  frame.afterSet && frame.afterSet(frame, prop, val, id);
 }
 
 function run(frame) {
@@ -65,9 +75,7 @@ function run(frame) {
         const type = '_o';
         if (variables[prop])                //if the property is already filled, and the set is blocked, then no new frame will run.
           return sequence.push(id + type + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
-        sequence.push(id + type);
-        variables[prop] = val;
-        afterSet && afterSet(frame, prop, val, id);
+        setVariable(id, type, prop, val, frame);
         run(frame);
       });
       result.error.then(val => {
@@ -76,10 +84,8 @@ function run(frame) {
 
         if (variables[prop])           //if the property is already filled, and the set is blocked, then no new frame will run.
           return sequence.push(id + type + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
-        //todo make a method, afterSet
-        sequence.push(id + type);
-        variables[prop] = val;
-        afterSet && afterSet(frame, prop, val, id);
+
+        setVariable(id, type, prop, val, frame);
         run(frame);
       });
     } else if ('success' in result) {
@@ -87,18 +93,13 @@ function run(frame) {
       sequence.pop();
       const type = '_io';
 
-      sequence.push(id + type);
-      variables[prop] = val;
-      afterSet && afterSet(frame, prop, val, id);
+      setVariable(id, type, prop, val, frame);
     } else /*if ('error' in result)*/ {
       const prop = propError;
       sequence.pop();
       const type = '_ie';
-
-      sequence.push(id + type);
       const val = result.error;
-      variables[prop] = val;
-      afterSet && afterSet(frame, prop, val, id);
+      setVariable(id, type, prop, val, frame);
     }
   }
   //todo if no action is added to the initial input, we have a dead end. This can be syntax checked.
@@ -115,7 +116,7 @@ function afterSet(frame, prop, val, i) {
 export function startStack(actions, startState, debug) {
   actions = normalizeIdObserversMissingErrors(actions); //todo moved up init time
 
-  const frame = {actions, variables: startState, debug, sequence: [], afterSet}; //todo move afterSet to inside the response/observers check
+  const frame = {actions, variables: startState, debug, sequence: [], sequenceActions: [], afterSet}; //todo move afterSet to inside the response/observers check
   run(frame);
   let response = undefined;
   if ('response' in frame.variables) {
