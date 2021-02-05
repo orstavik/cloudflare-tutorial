@@ -53,8 +53,8 @@ function run(frame) {
   debug && doDebug(debug, actions, variables, sequence);
   let action;
   while (action = nextReadyAction(actions, sequence, variables)) {
-    let [i, params, fun, prop, propError] = action;
-    sequence.push(i + '_i'); //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
+    let [id, params, fun, prop, propError] = action;
+    sequence.push(id + '_i'); //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
     //todo I think we need to doDebug here too.. #1 // debug && doDebug(debug, actions, variables, sequence);
     //todo make a method, beforeInvoke
     const result = runFun(fun, variables, params);
@@ -64,10 +64,10 @@ function run(frame) {
       result.success.then(val => {
         const type = '_o';
         if (variables[prop])                //if the property is already filled, and the set is blocked, then no new frame will run.
-          return sequence.push(i + type + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
-        sequence.push(i + type);
+          return sequence.push(id + type + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
+        sequence.push(id + type);
         variables[prop] = val;
-        afterSet && afterSet(frame, prop, val, i);
+        afterSet && afterSet(frame, prop, val, id);
         run(frame);
       });
       result.error.then(val => {
@@ -75,11 +75,11 @@ function run(frame) {
         const type = '_e';
 
         if (variables[prop])           //if the property is already filled, and the set is blocked, then no new frame will run.
-          return sequence.push(i + type + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
+          return sequence.push(id + type + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
         //todo make a method, afterSet
-        sequence.push(i + type);
+        sequence.push(id + type);
         variables[prop] = val;
-        afterSet && afterSet(frame, prop, val, i);
+        afterSet && afterSet(frame, prop, val, id);
         run(frame);
       });
     } else if ('success' in result) {
@@ -87,18 +87,18 @@ function run(frame) {
       sequence.pop();
       const type = '_io';
 
-      sequence.push(i + type);
+      sequence.push(id + type);
       variables[prop] = val;
-      afterSet && afterSet(frame, prop, val, i);
+      afterSet && afterSet(frame, prop, val, id);
     } else /*if ('error' in result)*/ {
       const prop = propError;
       sequence.pop();
       const type = '_ie';
 
-      sequence.push(i + type);
+      sequence.push(id + type);
       const val = result.error;
       variables[prop] = val;
-      afterSet && afterSet(frame, prop, val, i);
+      afterSet && afterSet(frame, prop, val, id);
     }
   }
   //todo if no action is added to the initial input, we have a dead end. This can be syntax checked.
