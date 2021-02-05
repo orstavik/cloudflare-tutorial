@@ -53,13 +53,13 @@ function asyncActionReturns(frame, id, type, output, val) {
 }
 
 function run(frame) {
+  //todo preFrame?
   for (let action; action = firstReadyAction(frame);) {
     const [id, params, fun, output, error] = action;
-
     frame.sequence += `:${id}_i`; //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
-    //todo make a method, beforeInvoke
-    frame.debug && doDebug(frame);
 
+    //todo preInvoke
+    frame.debug && doDebug(frame);
     const result = runFun(fun, frame.variables, params);
     if (result.success instanceof Promise) {
       frame.sequence += 'a';
@@ -73,7 +73,7 @@ function run(frame) {
       frame.variables[error] = result.error;
     }
   }
-  //postFrame
+  //todo postFrame
   frame.debug && doDebug(frame);
   frame.afterSet && frame.afterSet(frame);
 }
@@ -82,7 +82,6 @@ function run(frame) {
 //todo the observers and the response might not be disconnected along the way. This can also be syntax checked, if error leads to nowhere. But, this might and might not happen. So this is also best to check for run-time.
 //todo This means that we at this end point need to check to see if there are no unresolved issues.
 //todo here we would need to dispatch an error maybe..
-
 
 function afterSet(frame) {
   'response' in frame.variables && frame.resolverResponse && frame.resolverResponse(frame.variables.response), delete frame.resolverResponse;
