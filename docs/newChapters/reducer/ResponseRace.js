@@ -1,7 +1,3 @@
-function normalizeIdObserversMissingErrors(actions) {
-  return actions.map((a, i) => (a = [i, ...a], (a.length === 3 && a.push(`_observer_${i}`)), (a.length === 4 && a.push(`_error_${i}`)), a));
-}
-
 //returns either two Promises or either only success(not a Promise) or error (not a Promise)
 function runFun(fun, variables, params) {
   try {
@@ -16,16 +12,6 @@ function runFun(fun, variables, params) {
   } catch (err) {
     return {error: err};
   }
-}
-
-function doDebug({debug, actions, variables: context, sequence}) {           //todo, this function could be controlled from postSet and preInvoke
-  !(debug instanceof Function) && (debug = console.log);
-  actions = actions.map(([id, params, fun, output, error]) => [params, fun.name, output, error]);//be careful not to mutate actions here..
-  const variables = {...context};
-  for (let [key, value] of Object.entries(context))
-    variables[key] = value === undefined ? null : value;
-  const debugObj = {actions, sequence: sequence.split(':').slice(1), variables};     //todo pass the sequence as a string, not an array
-  debug(btoa(JSON.stringify(debugObj)));
 }
 
 function firstReadyAction(frame) {
@@ -75,7 +61,8 @@ function run(frame) {
   }
   //todo postFrame
   frame.debug && doDebug(frame);
-  frame.afterSet && frame.afterSet(frame);
+  frame.checkResponse && frame.checkResponse();
+  frame.checkObservers && frame.checkObservers();
 }
 
 //todo if no action is added to the initial input, we have a dead end. This can be syntax checked.
@@ -83,41 +70,45 @@ function run(frame) {
 //todo This means that we at this end point need to check to see if there are no unresolved issues.
 //todo here we would need to dispatch an error maybe..
 
-function afterSet(frame) {
-  'response' in frame.variables && frame.resolverResponse && frame.resolverResponse(frame.variables.response), delete frame.resolverResponse;
-  if(frame.resolverObservers) {
-    const openObservers = frame.actions.filter(([id, p, f, output, error])=>output.startsWith('_observer_') && !(output in frame.variables) && !(error in frame.variables));
-    if(openObservers.length === 0){
-      frame.resolverObservers(true);
-      delete frame.resolverObservers;
-    }
-  }
+function findUnresolvedObserver({actions, variables}) {
+  return actions.find(([id, p, f, output, error]) => output.startsWith('_observer_') && !(output in variables) && !(error in variables));
+}
+
+function findActionThatCanOutputResponse(actions) {
+  return actions.find(([i, p, f, o, e]) => o === 'response' || e === 'response');
+}
+
+function normalizeIdObserversMissingErrors(actions) {
+  return actions.map((a, i) => (a = [i, ...a], (a.length === 3 && a.push(`_observer_${i}`)), (a.length === 4 && a.push(`_error_${i}`)), a));
+}
+
+function doDebug({debug, actions, variables: context, sequence}) {           //todo, this function could be controlled from postSet and preInvoke
+  !(debug instanceof Function) && (debug = console.log);
+  actions = actions.map(([id, params, fun, output, error]) => [params, fun.name, output, error]);//be careful not to mutate actions here..
+  const variables = {...context};
+  for (let [key, value] of Object.entries(context))
+    variables[key] = value === undefined ? null : value;
+  const debugObj = {actions, sequence: sequence.split(':').slice(1), variables};     //todo pass the sequence as a string, not an array
+  debug(btoa(JSON.stringify(debugObj)));
 }
 
 export function startStack(actions, startState, debug) {
   actions = normalizeIdObserversMissingErrors(actions); //todo moved up init time
 
-  const frame = {actions, variables: startState, debug, sequence: '', afterSet};
+  const frame = {actions, variables: startState, debug, sequence: ''};
   run(frame);
-  //todo move afterSet down
-  let response = undefined;
-  if ('response' in frame.variables) {
-    response = frame.variables.response;
-  } else if (actions.find(([id, p, f, out, error]) => out === 'response' || error === 'response')) {
+  let response = frame.variables.response;
+  if (!('response' in frame.variables) && findActionThatCanOutputResponse(actions)) {
     let resolverResponse;
     response = new Promise(r => resolverResponse = r);
-    frame.resolverResponse = resolverResponse;
+    frame.checkResponse = () => ('response' in frame && delete frame.checkResponse, resolverResponse(frame.response));
   }
-  let observer = undefined;
 
-  const unresolvedObservers = actions
-    .filter(([id, p, f, out]) => out.startsWith("_observer_") && !(out in frame.variables))
-    .map(([id, p, f, out]) => parseInt(out.split('_')[2]));
-  if (unresolvedObservers.length) {
+  let observer;
+  if(findUnresolvedObserver(frame)){
     let resolverObservers;
     observer = new Promise(r => resolverObservers = r);
-    frame.resolverObservers = resolverObservers;
-    frame.unresolvedObservers = unresolvedObservers;
+    frame.checkObservers = () => (!findUnresolvedObserver(frame) && delete frame.checkObservers, resolverObservers(true));    //todo here we could return the list of all observers
   }
   return {response, observer};
 }
