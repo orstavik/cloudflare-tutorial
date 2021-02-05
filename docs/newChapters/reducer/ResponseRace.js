@@ -1,4 +1,3 @@
-
 //returns either two Promises or either only success(not a Promise) or error (not a Promise)
 function runFun(fun, variables, params) {
   try {
@@ -31,12 +30,16 @@ function firstReadyAction(frame) {
   }
 }
 
-function asyncActionReturns(frame, id, type, output, val) {
-  if (output in frame.variables)
-    return frame.sequence += `:${id}_${type}b`;
-  frame.sequence += `:${id}_${type}`;
-  frame.variables[output] = val;
+function asyncActionReturns(frame, callTxt, key, val) {
+  if (key in frame.variables)
+    return frame.sequence += callTxt + 'b';
+  setValue(frame, callTxt, key, val);
   run(frame);
+}
+
+function setValue(frame, callTxt, key, val) {
+  frame.sequence += callTxt;
+  frame.variables[key] = val;
 }
 
 function run(frame) {
@@ -45,27 +48,19 @@ function run(frame) {
     const [id, params, fun, output, error] = action;
     frame.sequence += `:${id}_i`; //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
 
-    //todo preInvoke
-    //todo, this function could be controlled from postSet and preInvoke
-    frame.debug && frame.debug(frameToString(frame));
+    frame.preInvoke?.call(frame);
     const result = runFun(fun, frame.variables, params);
     if (result.success instanceof Promise) {
       frame.sequence += 'a';
-      result.success.then(val => asyncActionReturns(frame, id, 'o', output, val));
-      result.error.then(val => asyncActionReturns(frame, id, 'e', error, val));
+      result.success.then(val => asyncActionReturns(frame, `:${id}_o`, output, val));
+      result.error.then(val => asyncActionReturns(frame, `:${id}_e`, error, val));
     } else if ('success' in result) {
-      frame.sequence += 'o';
-      frame.variables[output] = result.success;
+      setValue(frame, 'o', output, result.success);
     } else /*if ('error' in result)*/ {
-      frame.sequence += 'e';
-      frame.variables[error] = result.error;
+      setValue(frame, 'e', error, result.error);
     }
   }
-  //todo postFrame
-  //todo, this function could be controlled from postSet and preInvoke
-  frame.debug && frame.debug(frameToString(frame));
-  frame.checkResponse && frame.checkResponse();
-  frame.checkObservers && frame.checkObservers();
+  frame.postFrame?.call(frame);
 }
 
 //todo if no action is added to the initial input, we have a dead end. This can be syntax checked.
@@ -95,9 +90,12 @@ function frameToString({actions, variables: context, sequence}) {
   return btoa(JSON.stringify({actions, sequence, variables}));
 }
 
-export function startStack(actions, startState, debug) {
-  const frame = {actions, variables: startState, sequence: ''};
-  debug && (frame.debug = (debug instanceof Function ? debug : console.log)); //normalize frame.debug
+export function startStack(actions, variables, debug) {
+  debug && (debug = (debug instanceof Function ? debug : console.log)); //normalize debug
+  const frame = {actions, variables, sequence: ''};
+  frame.preInvoke = function(){
+    debug(frameToString(frame));
+  };
   run(frame);
   let response = frame.variables.response;
   if (!('response' in frame.variables) && findActionThatCanOutputResponse(actions)) {
@@ -105,11 +103,16 @@ export function startStack(actions, startState, debug) {
     response = new Promise(r => resolverResponse = r);
     frame.checkResponse = () => ('response' in frame && delete frame.checkResponse, resolverResponse(frame.response));
   }
-  let observer;
-  if(findUnresolvedObserver(frame)){
+  let observer;  //todo here we could return the list of all observers output, like allSettled would do..
+  if (findUnresolvedObserver(frame)) {    //todo we would do this by making findUnresolvedObservers into observerStatus
     let resolverObservers;
     observer = new Promise(r => resolverObservers = r);
-    frame.checkObservers = () => (!findUnresolvedObserver(frame) && delete frame.checkObservers, resolverObservers(true));    //todo here we could return the list of all observers output, like allSettled would do..
+    frame.checkObservers = () => (!findUnresolvedObserver(frame) && delete frame.checkObservers, resolverObservers(true));
+  }
+  frame.postFrame = function(){
+    debug(frameToString(frame));
+    frame.checkResponse && frame.checkResponse();
+    frame.checkObservers && frame.checkObservers();
   }
   return {response, observer};
 }
