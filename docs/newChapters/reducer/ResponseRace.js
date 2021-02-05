@@ -44,31 +44,27 @@ function firstReadyAction(frame) {
   }
 }
 
+function asyncActionReturns(frame, id, type, output, val) {
+  if (output in frame.variables)
+    return frame.sequence += `:${id}_${type}b`;
+  frame.sequence += `:${id}_${type}`;
+  frame.variables[output] = val;
+  run(frame);
+}
+
 function run(frame) {
   for (let action; action = firstReadyAction(frame);) {
     const [id, params, fun, output, error] = action;
-    
+
+    frame.sequence += `:${id}_i`; //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
     //todo make a method, beforeInvoke
     frame.debug && doDebug(frame);
 
-    frame.sequence += ':'+id + '_i'; //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
     const result = runFun(fun, frame.variables, params);
     if (result.success instanceof Promise) {
       frame.sequence += 'a';
-      result.success.then(val => {
-        frame.sequence += `:${id}_o`;
-        if (output in frame.variables)
-          return frame.sequence += 'b';
-        frame.variables[output] = val;
-        run(frame);
-      });
-      result.error.then(val => {
-        frame.sequence += `:${id}_e`;
-        if (error in frame.variables)
-          return frame.sequence += 'b';
-        frame.variables[error] = val;
-        run(frame);
-      });
+      result.success.then(val => asyncActionReturns(frame, id, 'o', output, val));
+      result.error.then(val => asyncActionReturns(frame, id, 'e', error, val));
     } else if ('success' in result) {
       frame.sequence += 'o';
       frame.variables[output] = result.success;
@@ -102,8 +98,9 @@ function afterSet(frame) {
 export function startStack(actions, startState, debug) {
   actions = normalizeIdObserversMissingErrors(actions); //todo moved up init time
 
-  const frame = {actions, variables: startState, debug, sequence: '', afterSet}; //todo move afterSet to inside the response/observers check
+  const frame = {actions, variables: startState, debug, sequence: '', afterSet};
   run(frame);
+  //todo move afterSet down
   let response = undefined;
   if ('response' in frame.variables) {
     response = frame.variables.response;
