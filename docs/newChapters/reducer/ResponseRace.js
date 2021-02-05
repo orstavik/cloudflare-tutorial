@@ -45,7 +45,8 @@ function run(frame) {
     frame.sequence += `:${id}_i`; //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
 
     //todo preInvoke
-    frame.debug && doDebug(frame);
+    //todo, this function could be controlled from postSet and preInvoke
+    frame.debug && frame.debug(frameToString(frame));
     const result = runFun(fun, frame.variables, params);
     if (result.success instanceof Promise) {
       frame.sequence += 'a';
@@ -60,7 +61,8 @@ function run(frame) {
     }
   }
   //todo postFrame
-  frame.debug && doDebug(frame);
+  //todo, this function could be controlled from postSet and preInvoke
+  frame.debug && frame.debug(frameToString(frame));
   frame.checkResponse && frame.checkResponse();
   frame.checkObservers && frame.checkObservers();
 }
@@ -82,20 +84,19 @@ function normalizeIdObserversMissingErrors(actions) {
   return actions.map((a, i) => (a = [i, ...a], (a.length === 3 && a.push(`_observer_${i}`)), (a.length === 4 && a.push(`_error_${i}`)), a));
 }
 
-function doDebug({debug, actions, variables: context, sequence}) {           //todo, this function could be controlled from postSet and preInvoke
-  !(debug instanceof Function) && (debug = console.log);
-  actions = actions.map(([id, params, fun, output, error]) => [params, fun.name, output, error]);//be careful not to mutate actions here..
+//be careful not to mutate actions here..
+function frameToString({actions, variables: context, sequence}) {
+  actions = actions.map(([id, params, fun, output, error]) => [params, fun.name, output, error]);
   const variables = {...context};
   for (let [key, value] of Object.entries(context))
     variables[key] = value === undefined ? null : value;
-  const debugObj = {actions, sequence: sequence.split(':').slice(1), variables};     //todo pass the sequence as a string, not an array
-  debug(btoa(JSON.stringify(debugObj)));
+  sequence = sequence.split(':').slice(1);                         //todo pass the sequence as a string, not an array
+  return btoa(JSON.stringify({actions, sequence, variables}));
 }
 
 export function startStack(actions, startState, debug) {
-  actions = normalizeIdObserversMissingErrors(actions); //todo moved up init time
-
-  const frame = {actions, variables: startState, debug, sequence: ''};
+  const frame = {actions, variables: startState, sequence: ''};
+  debug && (frame.debug = (debug instanceof Function ? debug : console.log)); //normalize frame.debug
   run(frame);
   let response = frame.variables.response;
   if (!('response' in frame.variables) && findActionThatCanOutputResponse(actions)) {
@@ -103,17 +104,17 @@ export function startStack(actions, startState, debug) {
     response = new Promise(r => resolverResponse = r);
     frame.checkResponse = () => ('response' in frame && delete frame.checkResponse, resolverResponse(frame.response));
   }
-
   let observer;
   if(findUnresolvedObserver(frame)){
     let resolverObservers;
     observer = new Promise(r => resolverObservers = r);
-    frame.checkObservers = () => (!findUnresolvedObserver(frame) && delete frame.checkObservers, resolverObservers(true));    //todo here we could return the list of all observers
+    frame.checkObservers = () => (!findUnresolvedObserver(frame) && delete frame.checkObservers, resolverObservers(true));    //todo here we could return the list of all observers output, like allSettled would do..
   }
   return {response, observer};
 }
 
 export function rrListener(actions, e, debug) {
+  actions = normalizeIdObserversMissingErrors(actions); //todo moved up init time
   const {response, observer} = startStack(actions, {request: e.request}, debug);
   observer && e.waitUntil(observer);
   if (response === undefined)
