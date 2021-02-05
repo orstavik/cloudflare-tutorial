@@ -33,23 +33,27 @@ function doDebug(debug, actions, context, sequence) {           //todo, this fun
   for (let [key, value] of Object.entries(context))
     variables[key] = value === undefined ? null : value;
   const debugObj = {actions, sequence, variables};
-  debugger
   debug(btoa(JSON.stringify(debugObj)));
 }
 
-function run(frame) {
-  const {actions, variables, debug, sequence} = frame;
-  debug && doDebug(debug, actions, variables, sequence);
-  for (let j = 0; j < actions.length; j++) {
-    let [i, params, fun, prop, propError] = actions[j];
-    if (sequence.find(call => call.startsWith(i + '_'))) //action already run
-      continue;             //optimize action filtering? make a mutable array of actions, and then remove from this list actions invoked?
-    if (prop in variables) {                             //goal completed, cancelling action
-      sequence.push(i + '_c');
+function nextReadyAction(actions, sequence, variables) {
+  for (let action of actions) {
+    if (sequence.find(call => call.startsWith(action[0] + '_'))) continue;  //action already invoked
+    if (action[1].find(p => !(p[0] === '*' || p in variables))) continue;   //required arguments not yet ready //todo here, it is possible to illustrate that an await has been called.
+    if (action[3] in variables) {                                           //goal completed, cancelling action
+      sequence.push(action[0] + '_c');
       continue;
     }
-    if (params.find(arg => arg[0] !== '*' && !(arg in variables)))  //action not ready: find unset, not-* arg
-      continue;
+    return action;                                                          //else, action is ready
+  }
+}
+
+function run(frame) {
+  const {actions, variables, debug, sequence, afterSet} = frame;
+  debug && doDebug(debug, actions, variables, sequence);
+  let action;
+  while (action = nextReadyAction(actions, sequence, variables)) {
+    let [i, params, fun, prop, propError] = action;
     sequence.push(i + '_i'); //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
     //todo I think we need to doDebug here too.. #1 // debug && doDebug(debug, actions, variables, sequence);
     //todo make a method, beforeInvoke
@@ -63,10 +67,8 @@ function run(frame) {
           return sequence.push(i + type + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
         sequence.push(i + type);
         variables[prop] = val;
-        prop === 'response' && frame.resolverResponse && frame.resolverResponse(val);
-        frame.unresolvedObservers && checkOutObserver(frame.unresolvedObservers, i) && frame.resolverObservers && frame.resolverObservers(true);
+        afterSet && afterSet(frame, prop, val, i);
         run(frame);
-        return;
       });
       result.error.then(val => {
         const prop = propError;
@@ -77,10 +79,8 @@ function run(frame) {
         //todo make a method, afterSet
         sequence.push(i + type);
         variables[prop] = val;
-        prop === 'response' && frame.resolverResponse && frame.resolverResponse(val);
-        frame.unresolvedObservers && checkOutObserver(frame.unresolvedObservers, i) && frame.resolverObservers && frame.resolverObservers(true);
+        afterSet && afterSet(frame, prop, val, i);
         run(frame);
-        return;
       });
     } else if ('success' in result) {
       const val = result.success;
@@ -89,12 +89,7 @@ function run(frame) {
 
       sequence.push(i + type);
       variables[prop] = val;
-      prop === 'response' && frame.resolverResponse && frame.resolverResponse(val);
-      frame.unresolvedObservers && checkOutObserver(frame.unresolvedObservers, i) && frame.resolverObservers && frame.resolverObservers(true);
-      // run(frame);
-      // return;
-      j=-1;
-      // continue;
+      afterSet && afterSet(frame, prop, val, i);
     } else /*if ('error' in result)*/ {
       const prop = propError;
       sequence.pop();
@@ -103,12 +98,7 @@ function run(frame) {
       sequence.push(i + type);
       const val = result.error;
       variables[prop] = val;
-      prop === 'response' && frame.resolverResponse && frame.resolverResponse(val);
-      frame.unresolvedObservers && checkOutObserver(frame.unresolvedObservers, i) && frame.resolverObservers && frame.resolverObservers(true);
-      // run(frame);
-      // return;
-      j=-1;
-      // continue;
+      afterSet && afterSet(frame, prop, val, i);
     }
   }
   //todo if no action is added to the initial input, we have a dead end. This can be syntax checked.
@@ -117,10 +107,15 @@ function run(frame) {
   //todo here we would need to dispatch an error maybe..
 }
 
+function afterSet(frame, prop, val, i) {
+  prop === 'response' && frame.resolverResponse && frame.resolverResponse(val);
+  frame.unresolvedObservers && checkOutObserver(frame.unresolvedObservers, i) && frame.resolverObservers && frame.resolverObservers(true);
+}
+
 export function startStack(actions, startState, debug) {
   actions = normalizeIdObserversMissingErrors(actions); //todo moved up init time
 
-  const frame = {actions, variables: startState, debug, sequence: []};
+  const frame = {actions, variables: startState, debug, sequence: [], afterSet}; //todo move afterSet to inside the response/observers check
   run(frame);
   let response = undefined;
   if ('response' in frame.variables) {
