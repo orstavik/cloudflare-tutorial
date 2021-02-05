@@ -80,10 +80,10 @@ function normalizeIdObserversMissingErrors(actions) {
 //be careful not to mutate actions here..
 function frameToString({actions, variables: context, sequence}) {
   actions = actions.map(([id, params, fun, output, error]) => [params, fun.name, output, error]);
-  const variables = {...context};
-  for (let [key, value] of Object.entries(context))
-    variables[key] = value === undefined ? null : value;
-  sequence = sequence.split(':').slice(1);                         //todo pass the sequence as a string, not an array
+  const variables = {};
+  for (let key in context)
+    variables[key] = context[key] === undefined ? null : context[key];
+  // sequence = sequence.split(':').slice(1);                         //todo pass the sequence as a string, not an array
   return btoa(JSON.stringify({actions, sequence, variables}));
 }
 

@@ -195,7 +195,7 @@
       .filter((s, i, ar) => ar.indexOf(s) === i);
     const idToPos = idToPosition(actions, states);
     const [maxX, maxY] = Object.values(idToPos).reduce(([max, may], [x, y]) => [Math.max(x, max), Math.max(y, may)], [0, 0]);
-    const calls2 = calls.map(c => c.split('_')).map(([action, status], id) => ({id, action: actions[action], status}));
+    const calls2 = calls.split(':').slice(1).map(c => c.split('_')).map(([action, status], id) => ({id, action: actions[action], status}));
     const lastObserver = findObserversResolution(actions, calls2);
     if (lastObserver !== -1)
       calls2[lastObserver].status += 'l';
@@ -332,7 +332,7 @@
 </script>
 
 <script>
-  let test = `eyJhY3Rpb25zIjpbW1sicmVxdWVzdCJdLCIiLCJhIiwiYSJdLFtbInJlcXVlc3QiXSwiIiwiYSIsInJlc3BvbnNlIl0sW1sicmVxdWVzdCJdLCJ0b29MYXRlIiwidG9vTGF0ZSIsIl9lcnJvcjIiXSxbWyJtYXliZUVycm9yIl0sImxvZyIsIl9vYnNlcnZlcjMiLCJfZXJyb3IzIl0sW1sicmVxdWVzdCJdLCJtYXliZUVycm9yIiwiaGVsbG8iLCJtYXliZUVycm9yIl0sW1sibWF5YmVFcnJvciJdLCJtYXliZUVycm9ySGFuZGxlciIsImVycm9yIiwiX2Vycm9yNSJdLFtbInJlcXVlc3QiXSwiaGVsbG9TdW5zaGluZSIsInJlc3BvbnNlIiwiX2Vycm9yNiJdLFtbImVycm9yIl0sImVycm9yVG9SZXN1bHQiLCJyZXNwb25zZSIsInJlc3BvbnNlIl0sW1sicmVzcG9uc2UiLCIqaGVsbG8iXSwibG9nIiwiX29ic2VydmVyOCIsIl9lcnJvcjgiXV0sInNlcXVlbmNlIjpbIjBfaW8iLCIxX2MiLCIyX2lhIiwiNF9pZSIsIjNfaW8iLCI1X2lvIiwiNl9pYSIsIjdfaW8iLCI4X2lhIiwiNl9vYiIsIjhfbyIsIjJfbyJdLCJ2YXJpYWJsZXMiOnsicmVxdWVzdCI6eyJ1cmwiOiJodHRwczovL3ZnLm5vL2Vycm9yIn0sImEiOiIxIiwibWF5YmVFcnJvciI6e30sIl9vYnNlcnZlcjMiOm51bGwsImVycm9yIjp7InN0YXR1cyI6NDAzfSwicmVzcG9uc2UiOnt9LCJfb2JzZXJ2ZXI4IjpudWxsLCJ0b29MYXRlIjoidGhpcyBmdW5jdGlvbiBydW5zIGFmdGVyIHRoZSBsYXN0IG9ic2VydmVyIn19`;
+  let test = `eyJhY3Rpb25zIjpbW1sicmVxdWVzdCJdLCIiLCJhIiwiYSJdLFtbInJlcXVlc3QiXSwiIiwiYSIsInJlc3BvbnNlIl0sW1sicmVxdWVzdCJdLCJ0b29MYXRlIiwidG9vTGF0ZSIsIl9lcnJvcl8yIl0sW1sibWF5YmVFcnJvciJdLCJsb2ciLCJfb2JzZXJ2ZXJfMyIsIl9lcnJvcl8zIl0sW1sicmVxdWVzdCJdLCJtYXliZUVycm9yIiwiaGVsbG8iLCJtYXliZUVycm9yIl0sW1sibWF5YmVFcnJvciJdLCJtYXliZUVycm9ySGFuZGxlciIsImVycm9yIiwiX2Vycm9yXzUiXSxbWyJyZXF1ZXN0Il0sImhlbGxvU3Vuc2hpbmUiLCJyZXNwb25zZSIsIl9lcnJvcl82Il0sW1siZXJyb3IiXSwiZXJyb3JUb1Jlc3VsdCIsInJlc3BvbnNlIiwicmVzcG9uc2UiXSxbWyJyZXNwb25zZSIsIipoZWxsbyJdLCJsb2ciLCJfb2JzZXJ2ZXJfOCIsIl9lcnJvcl84Il1dLCJzZXF1ZW5jZSI6IjowX2lvOjFfYzoyX2lhOjRfaWU6M19pbzo1X2lvOjZfaWE6N19pbzo4X2lhOjZfb2I6OF9vOjJfbyIsInZhcmlhYmxlcyI6eyJyZXF1ZXN0Ijp7InVybCI6Imh0dHBzOi8vdmcubm8vZXJyb3IifSwiYSI6IjEiLCJtYXliZUVycm9yIjp7fSwiX29ic2VydmVyXzMiOm51bGwsImVycm9yIjp7InN0YXR1cyI6NDAzfSwicmVzcG9uc2UiOnt9LCJfb2JzZXJ2ZXJfOCI6bnVsbCwidG9vTGF0ZSI6InRoaXMgZnVuY3Rpb24gcnVucyBhZnRlciB0aGUgbGFzdCBvYnNlcnZlciJ9fQ==`;
   location.hash = test;
 </script>
 
