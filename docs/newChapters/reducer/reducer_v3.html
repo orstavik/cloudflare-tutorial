@@ -119,10 +119,10 @@
 </pre>
 </details>
 <details>
-  <summary>
-    Open debug point in devtools: <input id="debug" type="checkbox" checked>.
+  <summary onclick="event.preventDefault()">
+    Open debug point in devtools: <input id="debug" type="checkbox" checkedx>.
     Doublecheck mutations in actions: <input id="mutations" type="checkbox">.
-    <button id="run">Run!</button>
+    <button id="run" autofocus>Run!</button>
   </summary>
   <h3>Below comes warnings:</h3>
   <pre id="warnings"></pre>
@@ -166,7 +166,7 @@
     })();
   </script>
 </details>
-<details>
+<details open>
   <summary>View debugger</summary>
   <iframe id="viewer" src="https://orstavik.github.io/cloudflare-tutorial/debug.html"></iframe>
 </details>
