@@ -1,3 +1,4 @@
+
 //returns either two Promises or either only success(not a Promise) or error (not a Promise)
 function runFun(fun, variables, params) {
   try {
