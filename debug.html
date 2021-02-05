@@ -225,8 +225,8 @@
     const [xE, yE] = idToPos[error];
 
     const myCalls = calls.filter(({action: a}) => action === a);
-    const invokeStep = myCalls[0].id;
-    const resolveStep = myCalls.length === 2 ? myCalls[1].id : myCalls[0].id;
+    const invokeStep = myCalls[0]?.id || Infinity;
+    const resolveStep = myCalls.length === 2 ? myCalls[1].id : myCalls[0]?.id || Infinity;
 
     const status = (myCalls[0]?.status || '') + (myCalls[1]?.status || '');
     const invoke = invokeStep === step || undefined;
