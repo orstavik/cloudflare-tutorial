@@ -59,7 +59,7 @@ function setVariable(id, type, prop, val, frame) {
 }
 
 function run(frame) {
-  const {actions, variables, debug, sequence, afterSet} = frame;
+  const {actions, variables, debug, sequence} = frame;
   debug && doDebug(debug, actions, variables, sequence);
   let action;
   while (action = nextReadyAction(actions, sequence, variables)) {
@@ -79,27 +79,17 @@ function run(frame) {
         run(frame);
       });
       result.error.then(val => {
-        const prop = propError;
-        const type = '_e';
-
-        if (variables[prop])           //if the property is already filled, and the set is blocked, then no new frame will run.
-          return sequence.push(id + type + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
-
-        setVariable(id, type, prop, val, frame);
+        if (variables[propError])           //if the property is already filled, and the set is blocked, then no new frame will run.
+          return sequence.push(id + '_e' + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
+        setVariable(id, '_e', propError, val, frame);
         run(frame);
       });
     } else if ('success' in result) {
-      const val = result.success;
       sequence.pop();
-      const type = '_io';
-
-      setVariable(id, type, prop, val, frame);
+      setVariable(id, '_io', prop, result.success, frame);
     } else /*if ('error' in result)*/ {
-      const prop = propError;
       sequence.pop();
-      const type = '_ie';
-      const val = result.error;
-      setVariable(id, type, prop, val, frame);
+      setVariable(id, '_ie', propError, result.error, frame);
     }
   }
   //todo if no action is added to the initial input, we have a dead end. This can be syntax checked.
