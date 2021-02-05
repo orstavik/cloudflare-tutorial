@@ -92,27 +92,28 @@ function frameToString({actions, variables: context, sequence}) {
 
 export function startStack(actions, variables, debug) {
   debug && (debug = (debug instanceof Function ? debug : console.log)); //normalize debug
-  const frame = {actions, variables, sequence: ''};
-  frame.preInvoke = function(){
-    debug(frameToString(frame));
+  const frame = {
+    actions, variables, sequence: '', preInvoke: function () {
+      debug(frameToString(frame));
+    }
   };
   run(frame);
-  let response = frame.variables.response;
+  let response = frame.variables.response, checkResponse;
   if (!('response' in frame.variables) && findActionThatCanOutputResponse(actions)) {
     let resolverResponse;
     response = new Promise(r => resolverResponse = r);
-    frame.checkResponse = () => ('response' in frame && delete frame.checkResponse, resolverResponse(frame.response));
+    checkResponse = () => ('response' in frame && (checkResponse = undefined), resolverResponse(frame.response));
   }
-  let observer;  //todo here we could return the list of all observers output, like allSettled would do..
+  let observer, checkObservers;  //todo here we could return the list of all observers output, like allSettled would do..
   if (findUnresolvedObserver(frame)) {    //todo we would do this by making findUnresolvedObservers into observerStatus
     let resolverObservers;
     observer = new Promise(r => resolverObservers = r);
-    frame.checkObservers = () => (!findUnresolvedObserver(frame) && delete frame.checkObservers, resolverObservers(true));
+    checkObservers = () => (!findUnresolvedObserver(frame) && (checkObservers = undefined), resolverObservers(true));
   }
-  frame.postFrame = function(){
+  frame.postFrame = function () {
     debug(frameToString(frame));
-    frame.checkResponse && frame.checkResponse();
-    frame.checkObservers && frame.checkObservers();
+    checkResponse?.call();
+    checkObservers?.call();
   }
   return {response, observer};
 }
