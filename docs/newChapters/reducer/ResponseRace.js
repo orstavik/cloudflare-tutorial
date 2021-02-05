@@ -49,8 +49,8 @@ function run(frame) {
     let result;
     for (let operator in frame.operators) {
       if (output.startsWith(operator)) {
-        result = frame.operators[operator](fun, args, frame, id);
         output = output.substr(operator.length);
+        result = frame.operators[operator](fun, args, frame, id, output);
         break;
       }
     }
@@ -137,21 +137,23 @@ function runFun(fun, args, frame, id) {
   }
 }
 
-function getOperators() {
-  const cache = {};
+function getOperators(c) {
+  const cache = c;
   const operators = {
     '': runFun,
-    '!': function (fun, args, frame, id) {
+    '!': function (fun, args, frame, id, output) {
+      cache[output] || (cache[output] = {});
+      debugger
       const key = JSON.stringify(args.length === 1 ? args[0] : args);
       if (key.length === Infinity) //todo what is the potential problems here??
-        return runFun(fun, args);
-      if (key in cache) {
+        return runFun(fun, args, frame, id);
+      if (key in cache[output]) {
         frame.sequence += `:${id}_!o`;  //marking the data as coming out of the cache.
-        return cache[key];
+        return cache[output][key];
       } else {
-        const result = runFun(fun, args);
+        const result = runFun(fun, args, frame, id);
         frame.sequence += `:${id}_!i`;   //marking the data as coming out of the cache.
-        return cache[key] = result;
+        return cache[output][key] = result;
       }
     }
   }
@@ -159,9 +161,9 @@ function getOperators() {
   return Object.fromEntries(Object.entries(operators).sort(([a], [b]) => a.length > b.length ? -1 : a.length === b.length ? 0 : 1));
 }
 
-export function rrListener(actions, e, debug) {
+export function rrListener(actions, e, debug, cache) {
   actions = normalizeIdObserversMissingErrors(actions); //todo moved up init time
-  const {response, observer} = startStack(actions, getOperators(), {request: e.request}, debug);
+  const {response, observer} = startStack(actions, getOperators(cache), {request: e.request}, debug);
   observer && e.waitUntil(observer);
   if (response === undefined)
     return;

@@ -67,6 +67,10 @@
       [['request'], tooLate, 'tooLate'],
       [['maybeError'], console.log],    //observer that will run earlier
 
+      [['request'], ({url}) => "hello1 " + url, "!cache1"],
+      [['request', 'a'], ({url}) => "hello2 " + url, "!cache2"],
+      [['a'], ({url}) => "hello3 " + url, "!cache3"],
+
       [['request'], maybeError, 'hello', 'maybeError'],
       [['maybeError'], maybeErrorHandler, 'error'],
       [['request'], helloSunshine, 'response'],
@@ -113,7 +117,8 @@
       request: {url: window.url}
     });
 
-  addEventListener('fetch', e => rrListener(listOfActions, e, debug));
+    const cache = {cache3: {'"1"': {success: 'sunshiny day'}}};
+  addEventListener('fetch', e => rrListener(listOfActions, e, debug, cache));
 
   dispatchEvent(fetch);
 </pre>
