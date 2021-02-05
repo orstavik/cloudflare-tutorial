@@ -18,15 +18,13 @@ function firstReadyAction(frame) {
   for (let action of frame.actions) {
     if (frame.sequence.indexOf(`:${action[0]}_`) >= 0) continue;          //action already invoked
     if (action[1].find(p => !(p[0] === '*' || p in frame.variables)))     //required arguments not yet ready
-      //frame.sequence += `:${action[0]}_waiting...`;
-      // todo should we illustrate when a function is not yet called? This can be discovered implicitly by reviewing the call stack
+      //frame.sequence += `:${action[0]}_waiting...`; // todo illustrates when a function could have been called, but whose arguments was not ready.
       continue;
-    if (action[3] in frame.variables) {                                   //goal completed, cancelling action
-      // todo It is possible to discover that a call has been made by reviewing the call stack.. move this complexity into the view?
-      frame.sequence += `:${action[0]}_c`;
+    if (action[3] in frame.variables) {               //goal completed, cancelling action
+      frame.sequence += `:${action[0]}_c`;            // todo this and _waiting can be discovered from analysis of the actions and callSequence..
       continue;
     }
-    return action;                                                  //else, action is ready
+    return action;                                    //else, action is ready
   }
 }
 
@@ -43,11 +41,15 @@ function setValue(frame, callTxt, key, val) {
 }
 
 function run(frame) {
-  //todo preFrame?
+  //frame.sequence += `:${id}_i`; //todo
+  //(re-)start state machine. This is a good sign when the state machine is triggered, either by the initial event, or by an async callback
+  // this will give us a good marker in the call sequence to draw a static state for the whole system.
+  // Here we can illustrate which edges have been active and which functions that have run and which functions and states are missing at this point.
+  // this would be a good point to jump between too. Illustrate which events happen "simultaneously", and which steps that are slow.
+  //if we do this, then I don't see the point in having a preFrame callback.
   for (let action; action = firstReadyAction(frame);) {
     const [id, params, fun, output, error] = action;
     frame.sequence += `:${id}_i`; //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
-
     frame.preInvoke?.call(frame);
     const result = runFun(fun, frame.variables, params);
     if (result.success instanceof Promise) {
@@ -62,11 +64,6 @@ function run(frame) {
   }
   frame.postFrame?.call(frame);
 }
-
-//todo if no action is added to the initial input, we have a dead end. This can be syntax checked.
-//todo the observers and the response might not be disconnected along the way. This can also be syntax checked, if error leads to nowhere. But, this might and might not happen. So this is also best to check for run-time.
-//todo This means that we at this end point need to check to see if there are no unresolved issues.
-//todo here we would need to dispatch an error maybe..
 
 function findUnresolvedObserver({actions, variables}) {
   return actions.find(([id, p, f, output, error]) => output.startsWith('_observer_') && !(output in variables) && !(error in variables));
@@ -117,6 +114,9 @@ export function startStack(actions, variables, debug) {
   }
   return {response, observer};
 }
+
+//1. syntax check for dead end states. We do this by checking each action. If the action is missing a required state (ie. a required state is neither an output of any other action, or a start variable), then we remove this action. We repeat this function recursively until there are no such actions removed in an entire pass). This will remove any loose ends. This can be done at compile time.
+//2. if this removes response, or any observers, then this will of course clear the way for any errors.
 
 export function rrListener(actions, e, debug) {
   actions = normalizeIdObserversMissingErrors(actions); //todo moved up init time
