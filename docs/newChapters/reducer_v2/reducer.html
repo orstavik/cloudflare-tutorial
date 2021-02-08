@@ -1,0 +1,100 @@
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  summary {
+    height: 1em;
+    width: 100%;
+  }
+  details[open] {
+    width: 100%;
+    height: calc(100vh - 2em);
+  }
+  #editor {
+    width: 100%;
+    height: calc(100% - 2em);
+  }
+  #viewer {
+    width: 100vw;
+    height: calc(100% - 2em);
+  }
+</style>
+<details>
+  <summary>Editor</summary>
+  <textarea name="editor" id="editor"></textarea>
+  <pre id="after" hidden>
+
+</pre>
+</details>
+<details>
+  <summary onclick="event.preventDefault()">
+    Open debug point in devtools: <input id="debug" type="checkbox">.
+    Doublecheck mutations in actions: <input id="mutations" type="checkbox">.
+    <button id="run" autofocus>Run!</button>
+  </summary>
+  <h3>Below comes warnings:</h3>
+  <pre id="warnings"></pre>
+  <h3>Below comes auto generated unit tests:</h3>
+  <pre id="units"></pre>
+  <iframe id="runner" hidden></iframe>
+  <script>
+    (function () {
+      const runner = document.querySelector('#runner');
+      const ta = document.querySelector('textarea');
+      let afterText;
+      //init
+      (async function () {
+        const test1Script = await fetch('tests/test1.js');
+        const mockEnvironment = await fetch('mockRunTime.js');
+        ta.value = await test1Script.text();
+        afterText = await mockEnvironment.text();
+      })();
+
+      function runInIframe() {
+        document.querySelector("#warnings").innerText = '';
+        const doDebug = document.querySelector('#debug').checked ? '\n\ndebugger;\n\n' : '';
+        const doMutationsCheck = document.querySelector('#mutations').checked ? '\n\nwindow.doMutationCheck = true;\n\n' : '';
+        const code = doDebug + doMutationsCheck + ta.value + afterText;
+        const file = `<html><base href="${location.href}/tests"><script type="module">${code}<` + `/script></html>`;
+        var blob = new Blob([file], {type: "text/html"});
+        var blob_url = URL.createObjectURL(blob);
+        runner.src = blob_url;
+      }
+
+      document.querySelector("#run").addEventListener('click', runInIframe);
+
+      function updateViewer(e) {
+        const msg = e.data;
+        if (msg[0] === '!') {
+          document.querySelector('#warnings').innerText += msg;
+        } else {
+          document.querySelector('#viewer').src = 'debug.html#' + msg;
+        }
+      }
+
+      addEventListener('message', updateViewer);
+    })();
+  </script>
+</details>
+<details open>
+  <summary>View debugger</summary>
+  <iframe id="viewer" src="https://orstavik.github.io/cloudflare-tutorial/debug.html"></iframe>
+</details>
+<pre hidden>
+todo the purpose of the reducer pattern is to make the logic more declarative.
+
+e is the state, but because it is async, we must decorate the state, and not replace it.
+reducer is a pure(-ish) function. It can get data from outside, and it can use only the data in the incoming state.
+errors needs to be masked on a reducer/reducer basis.
+
+the properties of the context object is *both* a property *and* a state marker at the same time.
+the property is both a point in space and a point in time.
+
+when more than one promise leads to a property, then first come first serve.
+This way, reducers can race to reach a point in space/time, and only the first reducer will fill the space/win the race.
+a reducer will not start until all its marked dependencies are fulfilled.
+
+This is a time/machine, as much as it is a state.
+</pre>
