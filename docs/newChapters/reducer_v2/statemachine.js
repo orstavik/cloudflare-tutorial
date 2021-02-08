@@ -64,7 +64,7 @@ export function run(frame) {
   for (let {action, args} = firstReadyAction(frame); action; {action, args} = firstReadyAction(frame)) {
     const [id, params, fun, output, error] = action;
     frame.sequence += `:${id}_i`; //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
-    frame.preInvoke?.call(frame);
+    frame.preInvoke?.call(null, frame);
     const result = runFun(fun, args);
     if (result.success instanceof Promise) {
       frame.sequence += 'a';
@@ -76,5 +76,5 @@ export function run(frame) {
       setValue(frame, 'e', error, result.error);
     }
   }
-  frame.postFrame?.call(frame);
+  frame.postFrame?.call(null, frame);
 }

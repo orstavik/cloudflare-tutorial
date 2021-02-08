@@ -16,13 +16,21 @@ function frameToString({actions, variables: context, sequence}) {
   return btoa(JSON.stringify({actions, sequence, variables}));
 }
 
-export function startStack(actions, variables, debug) {
-  debug && (debug = (debug instanceof Function ? debug : console.log)); //normalize debug
-  const frame = {
-    actions, variables, sequence: '', preInvoke: function () {
-      debug(frameToString(frame));
-    }
-  };
+let previous = {};
+
+function checkMutations(obj) {
+  const res = {}, diff = {};
+  for (let key in obj) {
+    res[key] = JSON.stringify(obj[key]);
+    previous[key] !== res[key] && (diff[key] = [previous[key], res[key]]);
+  }
+  previous = res;
+  return diff;
+}
+
+export function startStack(actions, variables, debug, preInvoke) {
+  //todo use a proxy for variables, to capture the setting of response and _observer_?
+  const frame = {actions, variables, sequence: '', preInvoke};
   run(frame);
   let response = frame.variables.response, checkResponse;
   if (!('response' in frame.variables) && findActionThatCanOutputResponse(actions)) {
@@ -36,16 +44,22 @@ export function startStack(actions, variables, debug) {
     observer = new Promise(r => resolverObservers = r);
     checkObservers = () => (!findUnresolvedObserver(frame) && (checkObservers = undefined), resolverObservers(true));
   }
-  frame.postFrame = function () {
+  frame.postFrame = function (frame) {
     debug(frameToString(frame));
     checkResponse?.call();
     checkObservers?.call();
-  }
+    checkMutations(frame.variables);
+  };
   return {response, observer};
 }
 
 export function rrListener(actions, e, debug) {
-  const {response, observer} = startStack(actions, {request: e.request}, debug);
+  const preInvoke = function (frame) {
+    debug(frameToString(frame));
+    checkMutations(frame.variables);
+  };
+  debug && (debug = (debug instanceof Function ? debug : console.log)); //normalize debug
+  const {response, observer} = startStack(actions, {request: e.request}, debug, preInvoke);
   observer && e.waitUntil(observer);
   if (response === undefined)
     return;
