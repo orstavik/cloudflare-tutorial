@@ -23,28 +23,25 @@ function firstReadyAction(frame) {
       continue;
     }
     const args = [];
-    for (let p of params) {
-      if(p.startsWith('&&')){
-        p = p.substr(2);
-        if(p in frame.variables){
+    for (let pp of params) {
+      if (!(pp instanceof Object)) {
+        args.push(pp);
+      } else if (pp.op === '&&') {
+        if (pp.key in frame.variables) {
           frame.sequence += `:${id}_c`;         //todo
           continue main;                        //the && inverse required parameter has already been set, so this action can be cancelled
         }
-      }
-      if(p.startsWith('&')){
-        p = p.substr(1);
-        if(!(p in frame.variables)){
+      } else if (pp.op === '&') {
+        if (!(pp.key in frame.variables)) {
           // frame.sequence += `:${id}_w`; // todo illustrates when a function could have been called, but whose arguments was not ready.
           continue main;
-        }
-        continue; //we continue, but we don't add the parameter to the args list
-      }
-      if(p[0] !== '*' && !(p in frame.variables)){
+        }         //we continue, but we don't add the parameter to the args list
+      } else if (pp.op !== '*' && !(pp.key in frame.variables)) {
         // frame.sequence += `:${id}_w`; // todo illustrates when a function could have been called, but whose arguments was not ready.
         continue main;
+      } else {
+        args.push(frame.variables[pp.key]);
       }
-      p[0] === '*' && (p = p.substr(1));
-      args.push(frame.variables[p]);
     }
     return {action, args};                                    //else, action is ready
   }
@@ -106,7 +103,7 @@ function normalizeIdObserversMissingErrors(actions) {
 //be careful not to mutate actions here..
 function frameToString({actions, variables: context, sequence}) {
   //todo here i need to unpack the params again. I do that by Json.stringify with a custom clause for the type value entities.. This means i need a class for it.
-  actions = actions.map(([id, params, fun, output, error]) => [params, fun.name, output, error]);
+  actions = actions.map(([id, params, fun, output, error]) => [params.map(p => p instanceof Object ? p.op + p.key : typeof (p) === 'string' ? JSON.stringify(p) : p), fun.name, output, error]);
   const variables = {};
   for (let key in context)
     variables[key] = context[key] === undefined ? null : context[key];
@@ -153,21 +150,14 @@ function parseParam(p) {
   if (p === 'false') return false;
   if (p === 'true') return true;
   const num = parseFloat(p);
-  if (num.toString() === p) return num;
+  if (num === p) return num;
 
   //<operator [*!&]{0,2}><state [a-z][a-zA-Z]*>
-  const [match, operator, state] = p.match(/([*!&]{0,2})([a-z][a-zA-Z]*)/) || [];
+  const [match, op, key] = p.match(/([*!&]{0,2})([a-z][a-zA-Z]*)/) || [];
   if (match)
-    return {operator, state};
+    return {op, key};
   throw new SyntaxError('Illegal parameter: ' + p);
 }
-
-//todo test the parsing of parameters
-// parseParam('"one two three"')
-// parseParam('3.14e-23');
-// debugger
-// parseParam('&');
-// parseParam('&&bob');
 
 // todo
 // 1. syntax check for dead end states. We do this by checking each action. If the action is missing a required state (ie. a required state is neither an output of any other action, or a start variable), then we remove this action. We repeat this function recursively until there are no such actions removed in an entire pass). This will remove any loose ends. This can be done at compile time.
@@ -175,8 +165,8 @@ function parseParam(p) {
 
 export function rrListener(actions, e, debug) {
   actions = normalizeIdObserversMissingErrors(actions); //todo moved up init time
-  //todo parse the parameters. This will give me lots of op/state objects. This makes it simpler to get the state name, and check for optional..
-  // actions.forEach(action => action[0] = action[0].map(p => parseParam(p))); //todo in progress
+  actions.forEach(action => action[1] = action[1].map(p => parseParam(p)));
+  //todo here we can add the compiler for the '!' operator..
   const {response, observer} = startStack(actions, {request: e.request}, debug);
   observer && e.waitUntil(observer);
   if (response === undefined)
