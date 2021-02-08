@@ -18,48 +18,51 @@ function frameToString({actions, variables: context, sequence}) {
 
 let previous = {};
 
-function checkMutations(obj) {
-  const res = {}, diff = {};
-  for (let key in obj) {
-    res[key] = JSON.stringify(obj[key]);
-    previous[key] !== res[key] && (diff[key] = [previous[key], res[key]]);
+function checkMutations({variables}) {
+  const res = {}, diff = [];
+  for (let key in variables) {
+    res[key] = JSON.stringify(variables[key]);
+    previous[key] !== res[key] && (diff.push([key, previous[key], res[key]]));
   }
   previous = res;
   return diff;
 }
 
-export function startStack(actions, variables, debug, preInvoke) {
-  //todo use a proxy for variables, to capture the setting of response and _observer_?
-  const frame = {actions, variables, sequence: '', preInvoke};
+export function startStack(actions, variables, preInvoke, postFrame) {
+  const frame = {
+    actions,
+    remainingActions: actions.slice(),
+    variables,
+    sequence: '',
+    preInvoke: frame => preInvoke.forEach(fun => fun(frame)),
+    postFrame: frame => postFrame.forEach(fun => fun(frame))
+  };
   run(frame);
-  let response = frame.variables.response, checkResponse;
+
+  let response = frame.variables.response;
   if (!('response' in frame.variables) && findActionThatCanOutputResponse(actions)) {
     let resolverResponse;
     response = new Promise(r => resolverResponse = r);
-    checkResponse = () => ('response' in frame && (checkResponse = undefined), resolverResponse(frame.response));
+    const checkResponse = () => 'response' in frame && postFrame.splice(postFrame.indexOf(checkResponse), 1) && resolverResponse(frame.response);
+    postFrame.push(checkResponse);
   }
-  let observer, checkObservers;  //todo here we could return the list of all observers output, like allSettled would do..
-  if (findUnresolvedObserver(frame)) {    //todo we would do this by making findUnresolvedObservers into observerStatus
+
+  let observer;
+  if (findUnresolvedObserver(frame)) {
     let resolverObservers;
     observer = new Promise(r => resolverObservers = r);
-    checkObservers = () => (!findUnresolvedObserver(frame) && (checkObservers = undefined), resolverObservers(true));
+    const checkObservers = () => !findUnresolvedObserver(frame) && postFrame.splice(postFrame.indexOf(checkObservers, 1)) && resolverObservers(true);
+    postFrame.push(checkObservers);
   }
-  frame.postFrame = function (frame) {
-    debug(frameToString(frame));
-    checkResponse?.call();
-    checkObservers?.call();
-    checkMutations(frame.variables);
-  };
+
   return {response, observer};
 }
 
 export function rrListener(actions, e, debug) {
-  const preInvoke = function (frame) {
-    debug(frameToString(frame));
-    checkMutations(frame.variables);
-  };
   debug && (debug = (debug instanceof Function ? debug : console.log)); //normalize debug
-  const {response, observer} = startStack(actions, {request: e.request}, debug, preInvoke);
+  const preInvoke = [frame => debug(frameToString(frame)), checkMutations];
+  const postFrame = [frame => debug(frameToString(frame)), checkMutations];
+  const {response, observer} = startStack(actions, {request: e.request}, preInvoke, postFrame);
   observer && e.waitUntil(observer);
   if (response === undefined)
     return;

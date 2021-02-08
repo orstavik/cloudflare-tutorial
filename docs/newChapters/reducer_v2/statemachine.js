@@ -13,6 +13,9 @@ function runFun(fun, args) {
   }
 }
 
+//todo use remainingActions
+//todo maybe we should keep the frame.actions as a mutable list, and then drop the actions not in use. Instead of using the sequence as a check.
+//todo this is better. But. We get a different problem, we don't have the debug ready.. But. I need a different format for the debug.
 function firstReadyAction(frame) {
   main: for (let action of frame.actions) {
     const [id, params, fun, output] = action;
@@ -58,6 +61,7 @@ function asyncActionReturns(frame, callTxt, key, val) {
 function setValue(frame, callTxt, key, val) {
   frame.sequence += callTxt;
   frame.variables[key] = val;
+  frame.postFrame?.call(null, frame);
 }
 
 export function run(frame) {
@@ -76,5 +80,4 @@ export function run(frame) {
       setValue(frame, 'e', error, result.error);
     }
   }
-  frame.postFrame?.call(null, frame);
 }
