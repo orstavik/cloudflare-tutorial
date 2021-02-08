@@ -34,7 +34,9 @@ const fetch = Object.assign(
   });
 
 const cache = {cache3: {'"1"': {success: 'sunshiny day'}}};
+
+//todo the runner should have a method that sent it a new event, instead of being created anew every time?
+//todo, or should we instead just keep the state of the
 const compiledActions = compile(listOfActions);
 addEventListener('fetch', e => rrListener(compiledActions, e, debug, cache));
-
 dispatchEvent(fetch);

@@ -39,49 +39,50 @@
   <h3>Below comes auto generated unit tests:</h3>
   <pre id="units"></pre>
   <iframe id="runner" hidden></iframe>
-  <script>
-    (function () {
-      const runner = document.querySelector('#runner');
-      const ta = document.querySelector('textarea');
-      let afterText;
-      //init
-      (async function () {
-        const test1Script = await fetch('tests/test1.js');
-        const mockEnvironment = await fetch('mockRunTime.js');
-        ta.value = await test1Script.text();
-        afterText = await mockEnvironment.text();
-      })();
-
-      function runInIframe() {
-        document.querySelector("#warnings").innerText = '';
-        const doDebug = document.querySelector('#debug').checked ? '\n\ndebugger;\n\n' : '';
-        const doMutationsCheck = document.querySelector('#mutations').checked ? '\n\nwindow.doMutationCheck = true;\n\n' : '';
-        const code = doDebug + doMutationsCheck + ta.value + afterText;
-        const file = `<html><base href="${location.href}/tests"><script type="module">${code}<` + `/script></html>`;
-        var blob = new Blob([file], {type: "text/html"});
-        var blob_url = URL.createObjectURL(blob);
-        runner.src = blob_url;
-      }
-
-      document.querySelector("#run").addEventListener('click', runInIframe);
-
-      function updateViewer(e) {
-        const msg = e.data;
-        if (msg[0] === '!') {
-          document.querySelector('#warnings').innerText += msg;
-        } else {
-          document.querySelector('#viewer').src = 'debug.html#' + msg;
-        }
-      }
-
-      addEventListener('message', updateViewer);
-    })();
-  </script>
 </details>
 <details open>
   <summary>View debugger</summary>
   <iframe id="viewer" src="https://orstavik.github.io/cloudflare-tutorial/debug.html"></iframe>
 </details>
+<script>
+  (function () {
+    const runner = document.querySelector('#runner');
+    const ta = document.querySelector('textarea');
+    let afterText;
+    //init
+    (async function () {
+      const test1Script = await fetch('tests/test1.js');
+      const mockEnvironment = await fetch('mockRunTime.js');
+      ta.value = await test1Script.text();
+      afterText = await mockEnvironment.text();
+    })();
+
+    function runInIframe() {
+      document.querySelector("#warnings").innerText = '';
+      const doDebug = document.querySelector('#debug').checked ? '\n\ndebugger;\n\n' : '';
+      const doMutationsCheck = document.querySelector('#mutations').checked ? '\n\nwindow.doMutationCheck = true;\n\n' : '';
+      const code = doDebug + doMutationsCheck + ta.value + afterText;
+      const file = `<html><base href="${location.href}/tests"><script type="module">${code}<` + `/script></html>`;
+      const blob = new Blob([file], {type: "text/html"});
+      runner.src = URL.createObjectURL(blob);
+    }
+
+    document.querySelector("#run").addEventListener('click', runInIframe);
+
+    function updateViewer(e) {
+      const msg = e.data;
+      if (msg[0] === '!') {
+        document.querySelector('#warnings').innerText += msg;
+      } else {
+        document.querySelector('#viewer').src = 'debug.html#' + msg;
+      }
+    }
+
+    addEventListener('message', updateViewer);
+  })();
+</script>
+
+
 <pre hidden>
 todo the purpose of the reducer pattern is to make the logic more declarative.
 
