@@ -1,3 +1,5 @@
+import {run} from "./statemachine.js";
+
 //this is a universal function. The convention is as follows:
 //If the response is undefined, or resolves to undefined, then the fetchEvent will pass the request to the sub system.
 //If the response is an Error or resolves to an Error, then the method will also throw an Error (without triggering the fetchEvent.passThroughOnException().
@@ -23,7 +25,6 @@ function handleResponse(fetchEvent, response, observer) {
   }());
 }
 
-import {run} from "./statemachine.js";
 
 function findUnresolvedObserver({actions, variables}) {
   return actions.find(([id, p, f, output, error]) => output.startsWith('_observer_') && !(output in variables) && !(error in variables));
