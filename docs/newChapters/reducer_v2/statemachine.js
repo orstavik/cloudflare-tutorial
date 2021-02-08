@@ -14,25 +14,19 @@ function runFun(fun, args) {
 }
 
 function firstReadyAction(frame) {
-  main: for (let action of frame.remainingActions) {
+  main:for (let i = 0; i < frame.remainingActions.length; i++) {
+    let action = frame.remainingActions[i];
     const args = [];
-    for (let pp of action[1]) {
-      if (!(pp instanceof Object)) {
-        args.push(pp);
-      } else if (pp.op === '&') {
-        if (!(pp.key in frame.variables)) {
-          // frame.sequence += `:${id}_w`; // todo illustrates when a function could have been called, but whose arguments was not ready.
-          continue main;
-        }         //we continue, but we don't add the parameter to the args list
-      } else if (pp.op !== '*' && !(pp.key in frame.variables)) {
-        // frame.sequence += `:${id}_w`; // todo illustrates when a function could have been called, but whose arguments was not ready. Must change the test against the callSequence to see if the action has already been called.
+    for (let p of action[1]) {
+      if (!(p instanceof Object))
+        args.push(p);
+      else if (p.op === '*' || p.key in frame.variables)
+        p.op !== '&' && args.push(frame.variables[p.key]);
+      else
         continue main;
-      } else {
-        args.push(frame.variables[pp.key]);
-      }
     }
-    frame.remainingActions.splice(frame.remainingActions.indexOf(action), 1);
-    return {action, args};                                    //else, action is ready
+    frame.remainingActions.splice(i, 1);
+    return {action, args};                                    
   }
   return {};
 }
