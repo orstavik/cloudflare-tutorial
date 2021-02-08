@@ -55,5 +55,3 @@ const listOfActions = [
   [['error'], errorToResult, 'response', 'response'],
   [['response', '*hello'], log],
 ];
-
-window.url = 'https://vg.no/error';

@@ -12,6 +12,16 @@
     width: 100%;
     height: calc(100vh - 2em);
   }
+  #request {
+    width: 45%;
+    float: left;
+    height: calc(100% - 2em);
+  }
+  #globals {
+    width: 45%;
+    float: left;
+    height: calc(100% - 2em);
+  }
   #editor {
     width: 100%;
     height: calc(100% - 2em);
@@ -22,11 +32,28 @@
   }
 </style>
 <details>
+  <summary>Input data</summary>
+  <textarea name="request" id="request">
+{
+  request:
+    {
+      url: 'https://vg.no/error'
+    }
+}
+  </textarea>
+  <textarea name="globals" id="globals">
+{
+    cache3: {
+      '"1"': {
+         success: 'sunshiny day'
+      }
+    }
+}
+  </textarea>
+</details>
+<details>
   <summary>Editor</summary>
   <textarea name="editor" id="editor"></textarea>
-  <pre id="after" hidden>
-
-</pre>
 </details>
 <details>
   <summary onclick="event.preventDefault()">
@@ -47,21 +74,23 @@
 <script>
   (function () {
     const runner = document.querySelector('#runner');
-    const ta = document.querySelector('textarea');
-    let afterText;
+    const editor = document.querySelector('#editor');
+    let mockServer;
     //init
     (async function () {
       const test1Script = await fetch('tests/test1.js');
       const mockEnvironment = await fetch('mockRunTime.js');
-      ta.value = await test1Script.text();
-      afterText = await mockEnvironment.text();
+      editor.value = await test1Script.text();
+      mockServer = await mockEnvironment.text();
     })();
 
     function runInIframe() {
       document.querySelector("#warnings").innerText = '';
       const doDebug = document.querySelector('#debug').checked ? '\n\ndebugger;\n\n' : '';
       const doMutationsCheck = document.querySelector('#mutations').checked ? '\n\nwindow.doMutationCheck = true;\n\n' : '';
-      const code = doDebug + doMutationsCheck + ta.value + afterText;
+      const fetchEvent = `window.request = ${document.querySelector("#request").value};\n`;
+      const globals = `window.globals = ${document.querySelector("#globals").value};\n`;
+      const code = doDebug + doMutationsCheck + editor.value + fetchEvent + globals + mockServer;
       const file = `<html><base href="${location.href}/tests"><script type="module">${code}<` + `/script></html>`;
       const blob = new Blob([file], {type: "text/html"});
       runner.src = URL.createObjectURL(blob);

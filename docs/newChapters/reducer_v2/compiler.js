@@ -1,3 +1,8 @@
+// todo
+// 1. syntax check for dead end states. We do this by checking each action. If the action is missing a required state (ie. a required state is neither an output of any other action, or a start variable), then we remove this action. We repeat this function recursively until there are no such actions removed in an entire pass). This will remove any loose ends. This can be done at compile time.
+//2. if this removes response, or any observers, then this will of course clear the way for any errors.
+
+
 // Parse parameters into either primitive arguments or <op><state> objects.
 function normalizeIdObserversMissingErrors(actions) {
   return actions.map((a, i) => (a = [i, ...a], (a.length === 3 && a.push(`_observer_${i}`)), (a.length === 4 && a.push(`_error_${i}`)), a));
@@ -22,7 +27,7 @@ function parseParam(p) {
   throw new SyntaxError('Illegal parameter: ' + p);
 }
 
-const cache = {};
+let cache = {};
 
 function fromCacheFun(...keys) {
   const key = JSON.stringify(keys.length === 1 ? keys[0] : keys);
@@ -38,6 +43,10 @@ function toCacheFun(val, ...keys) {
 
 function a2a(a) {
   return a;
+}
+
+export function setCache(obj){
+  cache = obj;
 }
 
 //!...args, fun,!out, error
@@ -80,4 +89,25 @@ export function compile(actions){
   actions = normalizeIdObserversMissingErrors(actions); //todo moved up init time
   actions.forEach(action => action[1] = action[1].map(p => parseParam(p)));
   return compileCacheActions(actions);
+}
+
+/**
+ * BUILTIN FUNCTIONS
+ */
+// doNothing:  a=>a
+// fail:       a=>throw a
+export function get(obj, path) {
+  if (path === '')
+    return obj;
+  if (!(obj instanceof Object))
+    throw new SyntaxError('The action "get" is given an illegal object: ' + typeof obj);
+  if (typeof path !== 'string')
+    throw new SyntaxError('The action "get" is given an illegal path: ' + typeof path);
+  for (let segment of path.split('.')) {
+    if (obj instanceof Headers || obj instanceof URLSearchParams)
+      obj = obj[segment] || obj.get(segment);
+    else
+      obj = obj[segment];
+  }
+  return obj;
 }
