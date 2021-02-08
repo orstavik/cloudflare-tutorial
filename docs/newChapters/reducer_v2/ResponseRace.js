@@ -1,3 +1,28 @@
+//this is a universal function. The convention is as follows:
+//If the response is undefined, or resolves to undefined, then the fetchEvent will pass the request to the sub system.
+//If the response is an Error or resolves to an Error, then the method will also throw an Error (without triggering the fetchEvent.passThroughOnException().
+//For all other instances, the response will be passed to the system as (the basis for an) HTTP Response.
+//The method fetchEvent.waitUntil will be called for the observer. The fetchEvent will not conclude until this Promise resolves.
+function handleResponse(fetchEvent, response, observer) {
+  observer && fetchEvent.waitUntil(observer);
+  if (response === undefined)
+    return;
+  if (response instanceof Error)
+    throw response;
+  if (!(response instanceof Promise))
+    return fetchEvent.respondWith(response);
+  fetchEvent.respondWith(async function () {
+    const result = await response;
+    if (result === undefined) {
+      fetchEvent.passThroughOnException();      //pass through to subsystem CDN
+      throw new Error('passing the request to the CDN subsystem.');
+    }
+    if (result instanceof Error)
+      throw result;
+    return result;
+  }());
+}
+
 import {run} from "./statemachine.js";
 
 function findUnresolvedObserver({actions, variables}) {
@@ -28,25 +53,29 @@ function checkMutations({variables}) {
   return diff;
 }
 
-export function startStack(actions, variables, preInvoke, postFrame) {
-  const frame = {
-    actions,
-    remainingActions: actions.slice(),
-    variables,
-    sequence: '',
-    preInvoke: frame => preInvoke.forEach(fun => fun(frame)),
-    postFrame: frame => postFrame.forEach(fun => fun(frame))
-  };
+function stateMachine(actions, variables, debug, doCheckMutations) {
+  //setting up debug and checkMutations callbacks
+  const preInvoke = [];
+  debug && (debug = (debug instanceof Function ? debug : console.log)); //normalize debug
+  debug && preInvoke.push(frame => debug(frameToString(frame)));
+  doCheckMutations && preInvoke.push(frame => {
+    const diff = checkMutations(frame);
+    if (diff.length > 1)
+      debug("Mutation!! " + JSON.stringify(diff));
+  });
+  const postFrame = preInvoke.slice();
+
+  const frame = {actions, remainingActions: actions.slice(), variables, sequence: '', preInvoke, postFrame};
   run(frame);
 
-  let response = frame.variables.response;
-  if (!('response' in frame.variables) && findActionThatCanOutputResponse(actions)) {
+  //setting up response and observer callbacks
+  let response = variables.response;
+  if (!('response' in variables) && findActionThatCanOutputResponse(actions)) {
     let resolverResponse;
     response = new Promise(r => resolverResponse = r);
-    const checkResponse = () => 'response' in frame && postFrame.splice(postFrame.indexOf(checkResponse), 1) && resolverResponse(frame.response);
+    const checkResponse = () => 'response' in variables && postFrame.splice(postFrame.indexOf(checkResponse), 1) && resolverResponse(variables.response);
     postFrame.push(checkResponse);
   }
-
   let observer;
   if (findUnresolvedObserver(frame)) {
     let resolverObservers;
@@ -58,26 +87,7 @@ export function startStack(actions, variables, preInvoke, postFrame) {
   return {response, observer};
 }
 
-export function rrListener(actions, e, debug) {
-  debug && (debug = (debug instanceof Function ? debug : console.log)); //normalize debug
-  const preInvoke = [frame => debug(frameToString(frame)), checkMutations];
-  const postFrame = [frame => debug(frameToString(frame)), checkMutations];
-  const {response, observer} = startStack(actions, {request: e.request}, preInvoke, postFrame);
-  observer && e.waitUntil(observer);
-  if (response === undefined)
-    return;
-  if (response instanceof Error)
-    throw response;
-  if (!(response instanceof Promise))
-    return e.respondWith(response);
-  e.respondWith(async function () {
-    const result = await response;
-    if (result === undefined) {
-      e.passThroughOnException();      //pass through to subsystem CDN
-      throw new Error('passing the request to the CDN subsystem.');
-    }
-    if (result instanceof Error)
-      throw result;
-    return result;
-  }());
+export function rrListener(actions, e, debug, doCheckMutations) {
+  const {response, observer} = stateMachine(actions, {request: e.request}, debug, doCheckMutations);
+  return handleResponse(e, response, observer);
 }
