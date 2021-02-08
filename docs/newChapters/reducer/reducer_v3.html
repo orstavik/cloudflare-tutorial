@@ -63,9 +63,11 @@
       [['request'], () => {
         throw new Error('should never happen')
       }, 'a', 'response'],
+      [['&&a'], ()=>1, 'no', 'No'],
+      [['&a', 'a'], console.log],
 
       [['request'], tooLate, 'tooLate'],
-      [['maybeError'], console.log],    //observer that will run earlier
+      [['maybeError'], ()=>1],    //observer that will run earlier
 
       [['request'], ({url}) => "hello1 " + url, "!cache1"],
       [['request', 'a'], ({url}) => "hello2 " + url, "!cache2"],

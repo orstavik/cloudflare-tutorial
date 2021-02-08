@@ -1,7 +1,6 @@
 //returns either two Promises or either only success(not a Promise) or error (not a Promise)
-function runFun(fun, variables, params) {
+function runFun(fun, args) {
   try {
-    const args = params.map(p => variables[p[0] === '*' ? p.substr(0) : p]);  //optimize argument resolution? Maybe not..
     const res = fun(...args);
     if (!(res instanceof Promise))
       return {success: res};
@@ -15,17 +14,41 @@ function runFun(fun, variables, params) {
 }
 
 function firstReadyAction(frame) {
-  for (let action of frame.actions) {
-    if (frame.sequence.indexOf(`:${action[0]}_`) >= 0) continue;          //action already invoked
-    if (action[1].find(p => !(p[0] === '*' || p in frame.variables)))     //required arguments not yet ready
-      //frame.sequence += `:${action[0]}_waiting...`; // todo illustrates when a function could have been called, but whose arguments was not ready.
-      continue;
-    if (action[3] in frame.variables) {               //goal completed, cancelling action
-      frame.sequence += `:${action[0]}_c`;            // todo this and _waiting can be discovered from analysis of the actions and callSequence..
+  main: for (let action of frame.actions) {
+    const [id, params, fun, output] = action;
+    if (frame.sequence.indexOf(`:${id}_`) >= 0) continue;          //action already invoked
+    //todo here we check the output
+    if (output in frame.variables) {               //goal completed, cancelling action
+      frame.sequence += `:${id}_c`;            // todo this and _waiting can be discovered from analysis of the actions and callSequence..
       continue;
     }
-    return action;                                    //else, action is ready
+    const args = [];
+    for (let p of params) {
+      if(p.startsWith('&&')){
+        p = p.substr(2);
+        if(p in frame.variables){
+          frame.sequence += `:${id}_c`;         //todo
+          continue main;                        //the && inverse required parameter has already been set, so this action can be cancelled
+        }
+      }
+      if(p.startsWith('&')){
+        p = p.substr(1);
+        if(!(p in frame.variables)){
+          // frame.sequence += `:${id}_w`; // todo illustrates when a function could have been called, but whose arguments was not ready.
+          continue main;
+        }
+        continue; //we continue, but we don't add the parameter to the args list
+      }
+      if(p[0] !== '*' && !(p in frame.variables)){
+        // frame.sequence += `:${id}_w`; // todo illustrates when a function could have been called, but whose arguments was not ready.
+        continue main;
+      }
+      p[0] === '*' && (p = p.substr(1));
+      args.push(frame.variables[p]);
+    }
+    return {action, args};                                    //else, action is ready
   }
+  return {};
 }
 
 function asyncActionReturns(frame, callTxt, key, val) {
@@ -48,11 +71,13 @@ function run(frame) {
   // Here we can illustrate which edges have been active and which functions that have run and which functions and states are missing at this point.
   // this would be a good point to jump between too. Illustrate which events happen "simultaneously", and which steps that are slow.
   //if we do this, then I don't see the point in having a preFrame callback.
-  for (let action; action = firstReadyAction(frame);) {
+  //todo this is not really necessary, as this is implied by the values in the callSequence.. We can analyze these properties quite simply..
+
+  for (let {action, args} = firstReadyAction(frame); action; {action, args} = firstReadyAction(frame)) {
     const [id, params, fun, output, error] = action;
     frame.sequence += `:${id}_i`; //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
     frame.preInvoke?.call(frame);
-    const result = runFun(fun, frame.variables, params);
+    const result = runFun(fun, args);
     if (result.success instanceof Promise) {
       frame.sequence += 'a';
       result.success.then(val => asyncActionReturns(frame, `:${id}_o`, output, val));
@@ -80,6 +105,7 @@ function normalizeIdObserversMissingErrors(actions) {
 
 //be careful not to mutate actions here..
 function frameToString({actions, variables: context, sequence}) {
+  //todo here i need to unpack the params again. I do that by Json.stringify with a custom clause for the type value entities.. This means i need a class for it.
   actions = actions.map(([id, params, fun, output, error]) => [params, fun.name, output, error]);
   const variables = {};
   for (let key in context)
@@ -115,12 +141,42 @@ export function startStack(actions, variables, debug) {
   return {response, observer};
 }
 
+// Parse parameters into either primitive arguments or <op><state> objects.
+function parseParam(p) {
+
+  //primitives
+  if (p === '') return undefined;//todo what should we do here?
+  if (p[0] === '"') return p.substr(1, p.length - 2);
+  if (p[0] === "'") return p.substr(1, p.length - 2);
+  if (p === "null") return null;
+  if (p === "undefined") return undefined;
+  if (p === 'false') return false;
+  if (p === 'true') return true;
+  const num = parseFloat(p);
+  if (num.toString() === p) return num;
+
+  //<operator [*!&]{0,2}><state [a-z][a-zA-Z]*>
+  const [match, operator, state] = p.match(/([*!&]{0,2})([a-z][a-zA-Z]*)/) || [];
+  if (match)
+    return {operator, state};
+  throw new SyntaxError('Illegal parameter: ' + p);
+}
+
+//todo test the parsing of parameters
+// parseParam('"one two three"')
+// parseParam('3.14e-23');
+// debugger
+// parseParam('&');
+// parseParam('&&bob');
+
 // todo
 // 1. syntax check for dead end states. We do this by checking each action. If the action is missing a required state (ie. a required state is neither an output of any other action, or a start variable), then we remove this action. We repeat this function recursively until there are no such actions removed in an entire pass). This will remove any loose ends. This can be done at compile time.
 //2. if this removes response, or any observers, then this will of course clear the way for any errors.
 
 export function rrListener(actions, e, debug) {
   actions = normalizeIdObserversMissingErrors(actions); //todo moved up init time
+  //todo parse the parameters. This will give me lots of op/state objects. This makes it simpler to get the state name, and check for optional..
+  // actions.forEach(action => action[0] = action[0].map(p => parseParam(p))); //todo in progress
   const {response, observer} = startStack(actions, {request: e.request}, debug);
   observer && e.waitUntil(observer);
   if (response === undefined)
@@ -139,4 +195,31 @@ export function rrListener(actions, e, debug) {
       throw result;
     return result;
   }());
+}
+
+/**
+ * BUILTIN FUNCTIONS
+ */
+export function fail() {
+  throw new Error();
+}
+
+export function doNothing(firstArg) {
+  return firstArg;
+}
+
+export function get(obj, path) {
+  if (path === '')
+    return obj;
+  if (!(obj instanceof Object))
+    throw new SyntaxError('The action "get" is given an illegal object: ' + typeof obj);
+  if (typeof path !== 'string')
+    throw new SyntaxError('The action "get" is given an illegal path: ' + typeof path);
+  for (let segment of path.split('.')) {
+    if (obj instanceof Headers || obj instanceof URLSearchParams)
+      obj = obj[segment] || obj.get(segment);
+    else
+      obj = obj[segment];
+  }
+  return obj;
 }
