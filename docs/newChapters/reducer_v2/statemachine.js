@@ -26,7 +26,7 @@ function firstReadyAction(frame) {
         continue main;
     }
     frame.remainingActions.splice(i, 1);
-    return {action, args};                                    
+    return {action, args};
   }
   return {};
 }
@@ -52,14 +52,14 @@ function setValue(frame, callTxt, key, val) {
   // 'response' and _observer_s are such states, that will be run.
   // There should be a rule that says that loose ends will be cleaned up and removed whenever possible.
   // If you want to have a state that is to be left as a loose end, we need to give this a prefix.
-  frame.postFrame && frame.postFrame.forEach(fun=>fun(frame));
+  frame.postFrame && frame.postFrame.forEach(fun => fun(frame));
 }
 
 export function run(frame) {
   for (let {action, args} = firstReadyAction(frame); action; {action, args} = firstReadyAction(frame)) {
     const [id, params, fun, output, error] = action;
     frame.sequence += `:${id}_i`; //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
-    frame.preInvoke && frame.preInvoke.forEach(fun=>fun(frame));
+    frame.preInvoke && frame.preInvoke.forEach(fun => fun(frame));
     const result = runFun(fun, args);
     if (result.success instanceof Promise) {
       frame.sequence += 'a';
