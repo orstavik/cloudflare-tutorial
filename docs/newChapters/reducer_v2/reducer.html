@@ -52,7 +52,9 @@
   </textarea>
 </details>
 <details>
-  <summary>Editor</summary>
+  <summary>Editor.
+    <a href="#test1.js">test1.js</a>
+    <a href="#helloSunshine.js">helloSunshine.js</a>/</summary>
   <textarea name="editor" id="editor"></textarea>
 </details>
 <details>
@@ -69,20 +71,23 @@
 </details>
 <details open>
   <summary>View debugger</summary>
-  <iframe id="viewer" src="https://orstavik.github.io/cloudflare-tutorial/debug.html"></iframe>
+  <iframe id="viewer" src="debug.html"></iframe>
 </details>
 <script>
+  async function updateEditor() {
+    const editor = document.querySelector('#editor');
+    const test1Script = await fetch('tests/' + location.hash.substr(1));
+    editor.value = await test1Script.text();
+  }
+
   (function () {
     const runner = document.querySelector('#runner');
-    const editor = document.querySelector('#editor');
     let mockServer;
+    (async () => mockServer = await (await fetch('mockRunTime.js')).text())();
     //init
-    (async function () {
-      const test1Script = await fetch('tests/test1.js');
-      const mockEnvironment = await fetch('mockRunTime.js');
-      editor.value = await test1Script.text();
-      mockServer = await mockEnvironment.text();
-    })();
+    updateEditor();
+    window.addEventListener('hashchange', updateEditor);
+    document.querySelector("#run").addEventListener('click', runInIframe);
 
     function runInIframe() {
       document.querySelector("#warnings").innerText = '';
@@ -96,21 +101,14 @@
       runner.src = URL.createObjectURL(blob);
     }
 
-    document.querySelector("#run").addEventListener('click', runInIframe);
 
     function updateViewer(e) {
-      const msg = e.data;
-      if (msg[0] === '!') {
-        document.querySelector('#warnings').innerText += msg;
-      } else {
-        document.querySelector('#viewer').src = 'debug.html#' + msg;
-      }
+      document.querySelector('#viewer').src = 'debug.html#' + e.data;
     }
 
     addEventListener('message', updateViewer);
   })();
 </script>
-
 
 <pre hidden>
 todo the purpose of the reducer pattern is to make the logic more declarative.
