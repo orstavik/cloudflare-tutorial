@@ -56,9 +56,9 @@
   <textarea name="editor" id="editor"></textarea>
 </details>
 <details>
-  <summary onclick="event.preventDefault()">
-    Open debug point in devtools: <input id="debug" type="checkbox">.
-    Doublecheck mutations in actions: <input id="mutations" type="checkbox">.
+  <summary onclick="event.target === this && event.preventDefault()">
+    <input id="debug" type="checkbox"> add debugger in devtools. ///////
+    <input id="mutations" type="checkbox"> doublecheck mutations in actions.
     <button id="run" autofocus>Run!</button>
   </summary>
   <h3>Below comes warnings:</h3>
