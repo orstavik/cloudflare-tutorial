@@ -74,8 +74,9 @@
   <iframe id="viewer" src="debug.html"></iframe>
 </details>
 <script>
+  const editor = document.querySelector('#editor');
+
   async function updateEditor() {
-    const editor = document.querySelector('#editor');
     const test1Script = await fetch('tests/' + location.hash.substr(1));
     editor.value = await test1Script.text();
   }
