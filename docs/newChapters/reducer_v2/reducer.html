@@ -1,0 +1,129 @@
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  summary {
+    height: 1em;
+    width: 100%;
+  }
+  details[open] {
+    width: 100%;
+    height: calc(100vh - 2em);
+  }
+  #request {
+    width: 45%;
+    float: left;
+    height: calc(100% - 2em);
+  }
+  #globals {
+    width: 45%;
+    float: left;
+    height: calc(100% - 2em);
+  }
+  #editor {
+    width: 100%;
+    height: calc(100% - 2em);
+  }
+  #viewer {
+    width: 100vw;
+    height: calc(100% - 2em);
+  }
+</style>
+<details>
+  <summary>Input data</summary>
+  <textarea name="request" id="request">
+{
+  request:
+    {
+      url: 'https://vg.no/error'
+    }
+}
+  </textarea>
+  <textarea name="globals" id="globals">
+{
+    cache3: {
+      '"1"': {
+         success: 'sunshiny day'
+      }
+    }
+}
+  </textarea>
+</details>
+<details>
+  <summary>Editor.
+    <a href="#test1.js">test1.js</a>
+    <a href="#helloSunshine.js">helloSunshine.js</a>/</summary>
+  <textarea name="editor" id="editor"></textarea>
+</details>
+<details>
+  <summary onclick="event.target === this && event.preventDefault()">
+    <input id="debug" type="checkbox"> add debugger in devtools. ///////
+    <input id="mutations" type="checkbox"> doublecheck mutations in actions.
+    <button id="run" autofocus>Run!</button>
+  </summary>
+  <h3>Below comes warnings:</h3>
+  <pre id="warnings"></pre>
+  <h3>Below comes auto generated unit tests:</h3>
+  <pre id="units"></pre>
+  <iframe id="runner" hidden></iframe>
+</details>
+<details open>
+  <summary>View debugger</summary>
+  <iframe id="viewer" src="debug.html"></iframe>
+</details>
+<script>
+  const editor = document.querySelector('#editor');
+
+  async function updateEditor() {
+    const test1Script = await fetch('tests/' + location.hash.substr(1));
+    editor.value = await test1Script.text();
+  }
+
+  (function () {
+    const runner = document.querySelector('#runner');
+    let mockServer;
+    (async () => mockServer = await (await fetch('mockRunTime.js')).text())();
+    //init
+    updateEditor();
+    window.addEventListener('hashchange', updateEditor);
+    document.querySelector("#run").addEventListener('click', runInIframe);
+
+    function runInIframe() {
+      document.querySelector("#warnings").innerText = '';
+      const doDebug = document.querySelector('#debug').checked ? '\n\ndebugger;\n\n' : '';
+      const doMutationsCheck = document.querySelector('#mutations').checked ? '\n\nwindow.doMutationCheck = true;\n\n' : '';
+      const fetchEvent = `window.request = ${document.querySelector("#request").value};\n`;
+      const globals = `window.globals = ${document.querySelector("#globals").value};\n`;
+      const code = doDebug + doMutationsCheck + editor.value + fetchEvent + globals + mockServer;
+      const file = `<html><base href="${location.href}/tests"><script type="module">${code}<` + `/script></html>`;
+      const blob = new Blob([file], {type: "text/html"});
+      runner.src = URL.createObjectURL(blob);
+    }
+
+
+    function updateViewer(e) {
+      document.querySelector('#viewer').src = 'debug.html#' + e.data;
+    }
+
+    addEventListener('message', updateViewer);
+  })();
+</script>
+
+<pre hidden>
+todo the purpose of the reducer pattern is to make the logic more declarative.
+
+e is the state, but because it is async, we must decorate the state, and not replace it.
+reducer is a pure(-ish) function. It can get data from outside, and it can use only the data in the incoming state.
+errors needs to be masked on a reducer/reducer basis.
+
+the properties of the context object is *both* a property *and* a state marker at the same time.
+the property is both a point in space and a point in time.
+
+when more than one promise leads to a property, then first come first serve.
+This way, reducers can race to reach a point in space/time, and only the first reducer will fill the space/win the race.
+a reducer will not start until all its marked dependencies are fulfilled.
+
+This is a time/machine, as much as it is a state.
+</pre>
