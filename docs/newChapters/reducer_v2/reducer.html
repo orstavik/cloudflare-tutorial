@@ -17,7 +17,7 @@
     float: left;
     height: calc(100% - 2em);
   }
-  #globals {
+  #env {
     width: 45%;
     float: left;
     height: calc(100% - 2em);
@@ -33,25 +33,16 @@
 </style>
 <details>
   <summary>Input data</summary>
-  <textarea name="request" id="request">
-{
-  "url": "https://vg.no/error"
-}
-  </textarea>
-  <textarea name="globals" id="globals">
-{
-    "cache3": {
-      "1": {
-         "success": "sunshiny day"
-      }
-    }
-}
-  </textarea>
+  <textarea name="request" id="request"></textarea>
+  <textarea name="env" id="env"></textarea>
+  <textarea name="fullState" id="fullState" hidden></textarea>
+  <textarea name="trace" id="trace" hidden></textarea>
 </details>
 <details>
-  <summary>Editor.
-    <a href="#test1.js">test1.js</a>
+  <summary id="editorHeader">Editor.
+    <a href="#test1.js">test1.js</a>/
     <a href="#helloSunshine.js">helloSunshine.js</a>/
+    <a href="#eyJmdW5jdGlvbnMiOnsiW1wiZ2V0VXJsXCIsXCJoZWxsb1N1bnNoaW5lXCJdIjoiZGF0YTp0ZXh0L2phdmFzY3JpcHQsXFxcbmV4cG9ydCBmdW5jdGlvbiBnZXRVcmwoYSkge1xcXG4gIHJldHVybiBhLnVybDtcXFxufVxcXG5cXFxuZXhwb3J0IGZ1bmN0aW9uIGhlbGxvU3Vuc2hpbmUoYSkge1xcXG4gIHJldHVybiAnSGVsbG9TdW5zaGluZTogJyArIGE7XFxcbn1cXFxuXFxcbiJ9LCJhY3Rpb25zIjpbW1sicmVxdWVzdCJdLCJnZXRVcmwiLCJ1cmwiXSxbWyJ1cmwiXSwiaGVsbG9TdW5zaGluZSIsInJlc3BvbnNlIl1dLCJzdGF0ZSI6eyJyZXF1ZXN0Ijp7InVybCI6Imh0dHBzOi8vdmcubm8vZXJyb3IifSwiZW52Ijp7ImNhY2hlMyI6eyIxIjp7InN1Y2Nlc3MiOiJzdW5zaGlueSBkYXkifX0sIl9kZWJ1ZyI6dHJ1ZSwiX211dGF0aW9uQ2hlY2siOnRydWV9fX0">helloSunshine</a>
   </summary>
   <textarea name="editor" id="editor"></textarea>
 </details>
@@ -72,23 +63,53 @@
   <iframe id="viewer" src="debug.html"></iframe>
 </details>
 <script>
-  const editor = document.querySelector('#editor');
 
-  async function updateEditor() {
-    const test1Script = await fetch('tests/' + location.hash.substr(1));
-    editor.value = await test1Script.text();
+  function printEditableFunction([name, body]) {
+    if (body.startsWith('data:text/javascript,'))
+      return body.substr(21).replaceAll('\\\n', '\n').replaceAll('\"', '"') + '\n';
+    name = name[0] === '[' ? JSON.parse(name).join(', ') : name;
+    return `import {${name}} from "${body}";`;
   }
 
-  function encodeInstanceState(actions, functions, startState, debug, mutationCheck) {
-    return btoa(JSON.stringify({actions, functions, startState, runnerSettings: {debug, mutationCheck}}));
+  function editorText(actions, functions) {
+    const functionsText = Object.entries(functions).map(printEditableFunction).join('\n');
+    const actionsText = `const actions = ${JSON.stringify(actions, null, 2)};`
+    return `${functionsText}\n${actionsText}`;
   }
+
+  function render() {
+    try {
+      const data = location.hash.substr(1);
+      const {actions, functions, trace, state} = JSON.parse(atob(data));
+
+      document.querySelector("#editor").value = editorText(actions, functions);
+
+      document.querySelector("#trace").value = trace;
+
+      const request = JSON.stringify(state.request, null, 2);
+      const env = JSON.stringify(state.env, null, 2);
+      const fullState = JSON.stringify(state, null, 2);
+      document.querySelector("#request").value = request;
+      document.querySelector("#env").value = env;
+      document.querySelector("#fullState").value = fullState;
+      document.querySelector("#mutations").checked = !!state?.env?._debug;
+      document.querySelector("#debug").checked = !!state?.env?._mutationCheck;
+
+      document.querySelector("#viewer").src = 'debug.html#' + data;
+    } catch (err) {
+      console.error('render failed: ' + err);
+    }
+  }
+
+  addEventListener('hashchange', render);
+  render();
 
   //todo only encrypting all the functions in one big bite here..
   //todo should make these entries individual per function to much better support automatic unit tests.
   //todo and ml
   //todo and smart ide that might based on a series of unit tests suggest functions that you can replace your functions with.
-  function getCodeFromEditor() {
-    let [functions, actions] = editor.value.trim().split('const listOfActions =');
+  function getCodeFromEditor(text) {
+    let [functions, actions] = text.split('const listOfActions =');
     actions = JSON.parse(actions.substr(0, actions.length - 1));
     const keys = JSON.stringify(actions.map(([p, fun]) => fun));
     functionsList = {};
@@ -96,30 +117,28 @@
     return {functions: functionsList, actions};
   }
 
-  (function () {
-    //init
-    updateEditor();
-    window.addEventListener('hashchange', updateEditor);
-    document.querySelector("#run").addEventListener('click', runInIframe);
+  //todo this method is what runs when something changes in the editor
+  function updateHash() {
+    const request = JSON.parse(document.querySelector("#request").value);
+    const env = JSON.parse(document.querySelector("#env").value);
+    const fullState = JSON.parse(document.querySelector("#fullState").value);
+    const _mutationCheck = document.querySelector("#mutations").checked;
+    const _debug = document.querySelector("#debug").checked;
+    const codeText = document.querySelector("#editor").value.trim();
+    const trace = document.querySelector("#trace").value;
 
-    function runInIframe() {
-      document.querySelector("#warnings").innerText = '';
-      const doDebug = document.querySelector('#debug').checked;
-      const doMutationsCheck = document.querySelector('#mutations').checked;
-      const request = JSON.parse(document.querySelector("#request").value);
-      const env = JSON.parse(document.querySelector("#globals").value);
-      let {functions, actions} = getCodeFromEditor();
-      const hash = encodeInstanceState(actions, functions, {request, env}, doDebug, doMutationsCheck);
-      document.querySelector('#runner').src = 'runner.html#' + hash;
-    }
+    const {functions, actions} = getCodeFromEditor(codeText);
+    const state = Object.assign(fullState, {request, env}, {env: {_debug, _mutationCheck}});
+    const data = {actions, functions, state, trace};
+    const hash = btoa(JSON.stringify(data));
+    location.hash = "#" + hash;
+  }
 
-    function updateViewer(e) {
-      debugger
-      document.querySelector('#viewer').src = 'debug.html#' + e.data;
-    }
+  document.querySelector("#run").addEventListener('click', function () {
+    document.querySelector('#runner').src = 'runner.html' + location.hash;
+  });
 
-    addEventListener('message', updateViewer);
-  })();
+  addEventListener('message', e => location.hash = '#' + e.data);
 </script>
 
 <pre hidden>
