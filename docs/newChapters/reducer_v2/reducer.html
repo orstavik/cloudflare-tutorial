@@ -95,7 +95,8 @@
       document.querySelector("#mutations").checked = !!state?.env?._debug;
       document.querySelector("#debug").checked = !!state?.env?._mutationCheck;
 
-      document.querySelector("#viewer").src = 'debug.html#' + data;
+      //todo viewer turned off
+      // document.querySelector("#viewer").src = 'debug.html#' + data;
     } catch (err) {
       console.error('render failed: ' + err);
     }
@@ -109,12 +110,12 @@
   //todo and ml
   //todo and smart ide that might based on a series of unit tests suggest functions that you can replace your functions with.
   function getCodeFromEditor(text) {
-    let [functions, actions] = text.split('const listOfActions =');
+    let [code, actions] = text.split('const listOfActions =');
     actions = JSON.parse(actions.substr(0, actions.length - 1));
     const keys = JSON.stringify(actions.map(([p, fun]) => fun));
-    functionsList = {};
-    functionsList[keys] = "data:text/javascript,\\\n" + functions.replaceAll('\n', '\\\n').replaceAll('"', '\\"');
-    return {functions: functionsList, actions};
+    const functions = {};
+    functions[keys] = "data:text/javascript,\\\n" + code.replaceAll('\n', '\\\n').replaceAll('"', '\\"');
+    return {functions, actions};
   }
 
   //todo this method is what runs when something changes in the editor
