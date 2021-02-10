@@ -1,0 +1,107 @@
+<script id="dynamo" type="module"></script>
+
+<script type="module">
+  import {handleResponse, stateMachine} from "./ResponseRace.js";
+
+  function debug(frame) {
+    const msg = frameToString(frame);
+    console.log(msg);
+    window.parent.postMessage(msg, '*');
+  }
+
+  function frameToString({actions, variables: context, sequence}) {
+    actions = actions.map(([id, params, fun, output, error]) => [params.map(p => p instanceof Object ? p.op + p.key : typeof (p) === 'string' ? JSON.stringify(p) : p), fun.name, output, error]);
+    const variables = {};
+    for (let key in context)
+      variables[key] = context[key] === undefined ? null : context[key];
+    return btoa(JSON.stringify({actions, sequence, variables}));
+  }
+
+  let previous = {};
+
+  function checkMutations({variables}) {
+    const res = {}, diff = [];
+    for (let key in variables) {
+      res[key] = JSON.stringify(variables[key]);
+      previous[key] !== res[key] && (diff.push([key, previous[key], res[key]]));
+    }
+    previous = res;
+    return diff;
+  }
+
+  function alertMutations(frame) {
+    const diff = checkMutations(frame);
+    if (diff.length > 1)
+      debug("Mutation!! " + JSON.stringify(diff));
+  }
+
+  window.debug = debug;
+  window.alertMutations = alertMutations;
+
+  //adding mock methods for the fetch event
+  addEventListener('fetch', e => {
+    e.passThroughOnException = () => console.log('passThroughOnException.');
+    e.waitUntil = async data => console.log('waitUntil: ', await data);
+    e.respondWith = async data => console.log('respondWith: ', await data);
+  });
+
+  function printParam(p) {
+    if (p instanceof Object)
+      return `"${p.op}${p.key}"`;
+    if (typeof p === 'string')
+      return JSON.stringify(p);
+    return p;
+  }
+
+  function printAction(action) {
+    const [params, fun, output, error] = action;
+    return `[[${params.map(printParam).join(', ')}], ${fun}, '${output}', '${error}']`;
+  }
+
+  function printFunction([key, value]) {
+    if (key[0] === '[')
+      key = JSON.parse(key).join(', ');
+    return `import {${key}} from "${value}";`;
+  }
+
+  function decodeInstanceState(txt) {
+    const text = atob(txt);
+    return JSON.parse(text);
+  }
+
+  function printFunctions(functions) {
+    return Object.entries(functions).map(printFunction).join('\\n')
+  }
+
+  addEventListener('fetch', e => {
+    console.log(e);
+    const {response, observer} = stateMachine(window.actions, e.startState, window.cbs);
+    handleResponse(e, response, observer);
+  });
+
+  (function init() {
+    const dynamo = document.querySelector("#dynamo");
+    const {functions, actions, startState, runnerSettings} = decodeInstanceState(location.hash.substr(1));
+    const textContent = printCode(functions, actions, runnerSettings, startState);
+    dynamo.textContent = textContent;
+  })();
+
+  function printCode(functions, actions, {mutationsCheck, debug}, startState) {
+    return `
+import {compile} from "./compiler.js";
+
+${printFunctions(functions)}
+
+const actions = [
+  ${actions.map(printAction).join(',\n  ')}
+];
+window.actions = compile(actions);
+
+window.cbs = [${(debug ? 'debug, ' : '') + (mutationsCheck ? 'alertMutations' : '')}];
+
+const startState = ${JSON.stringify(startState, null, 2)};
+
+dispatchEvent(Object.assign(new Event('fetch'), {startState}));`;
+  }
+
+</script>

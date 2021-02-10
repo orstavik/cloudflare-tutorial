@@ -31,27 +31,61 @@ async function log(response, hello) {
   // fetch('log', data);
 }
 
+function makeOne() {
+  return '1';
+}
+
+const fail = () => {
+  throw new Error('should never happen')
+};
+
+function makeOneNumber() {
+  return 1;
+}
+
+function hello1({url}) {
+  return "hello1 " + url;
+}
+
+function hello2({url}) {
+  return "hello2 " + url;
+}
+
+function hello3({url}) {
+  return "hello3 " + url;
+}
+
+function andAOne(a) {
+  return a + 1;
+}
+
+function twenty(a) {
+  return 20;
+}
+
+function consoleLog(...args) {
+  return console.log(...args)
+}
+
 const listOfActions = [
-  [['request'], () => '1', 'a', 'a'],
-  [['request'], () => {
-    throw new Error('should never happen')
-  }, 'a', 'response'],
-  [['&&a'], ()=>1, 'no', 'No'],
-  [['&a', 42, '"hello sunshine"'], console.log],
+  [["request"], "makeOne", "a", "a"],
+  [["request"], "fail", "a", "response"],
+  [["&&a"], "makeOneNumber", "no", "No"],
+  [["&a", 42, "\"hello sunshine\""], "consoleLog"],
 
-  [['request'], a=>20, 'bo', 'boError'],
-  [['!bo'], a=>a+1, '!co'],
+  [["request"], "twenty", "bo", "boError"],
+  [["!bo"], "andAOne", "!co"],
 
-  [['request'], tooLate, 'tooLate'],
-  [['maybeError'], ()=>1],    //observer that will run earlier
+  [["request"], "tooLate", "tooLate"],
+  [["maybeError"], "makeOneNumber"],    //observer that will run earlier
 
-  [['request'], ({url}) => "hello1 " + url, "!cache1"],
-  [['request', 'a'], ({url}) => "hello2 " + url, "!cache2"],
-  [['a'], ({url}) => "hello3 " + url, "!cache3"],
+  [["request"], hello1, "!cache1"],
+  [["request", "a"], hello2, "!cache2"],
+  [["a"], hello3, "!cache3"],
 
-  [['request'], maybeError, 'hello', 'maybeError'],
-  [['maybeError'], maybeErrorHandler, 'error'],
-  [['request'], helloSunshine, 'response'],
-  [['error'], errorToResult, 'response', 'response'],
-  [['response', '*hello'], log],
+  [["request"], "maybeError", "hello", "maybeError"],
+  [["maybeError"], "maybeErrorHandler", "error"],
+  [["request"], "helloSunshine", "response"],
+  [["error"], "errorToResult", "response", "response"],
+  [["response", "*hello"], "log"],
 ];

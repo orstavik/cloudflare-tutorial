@@ -35,17 +35,14 @@
   <summary>Input data</summary>
   <textarea name="request" id="request">
 {
-  request:
-    {
-      url: 'https://vg.no/error'
-    }
+  "url": "https://vg.no/error"
 }
   </textarea>
   <textarea name="globals" id="globals">
 {
-    cache3: {
-      '"1"': {
-         success: 'sunshiny day'
+    "cache3": {
+      "1": {
+         "success": "sunshiny day"
       }
     }
 }
@@ -54,7 +51,8 @@
 <details>
   <summary>Editor.
     <a href="#test1.js">test1.js</a>
-    <a href="#helloSunshine.js">helloSunshine.js</a>/</summary>
+    <a href="#helloSunshine.js">helloSunshine.js</a>/
+  </summary>
   <textarea name="editor" id="editor"></textarea>
 </details>
 <details>
@@ -81,10 +79,24 @@
     editor.value = await test1Script.text();
   }
 
+  function encodeInstanceState(actions, functions, startState, debug, mutationCheck) {
+    return btoa(JSON.stringify({actions, functions, startState, runnerSettings: {debug, mutationCheck}}));
+  }
+
+  //todo only encrypting all the functions in one big bite here..
+  //todo should make these entries individual per function to much better support automatic unit tests.
+  //todo and ml
+  //todo and smart ide that might based on a series of unit tests suggest functions that you can replace your functions with.
+  function getCodeFromEditor() {
+    let [functions, actions] = editor.value.trim().split('const listOfActions =');
+    actions = JSON.parse(actions.substr(0, actions.length - 1));
+    const keys = JSON.stringify(actions.map(([p, fun]) => fun));
+    functionsList = {};
+    functionsList[keys] = "data:text/javascript,\\\n" + functions.replaceAll('\n', '\\\n').replaceAll('"', '\\"');
+    return {functions: functionsList, actions};
+  }
+
   (function () {
-    const runner = document.querySelector('#runner');
-    let mockServer;
-    (async () => mockServer = await (await fetch('mockRunTime.js')).text())();
     //init
     updateEditor();
     window.addEventListener('hashchange', updateEditor);
@@ -92,18 +104,17 @@
 
     function runInIframe() {
       document.querySelector("#warnings").innerText = '';
-      const doDebug = document.querySelector('#debug').checked ? '\n\ndebugger;\n\n' : '';
-      const doMutationsCheck = document.querySelector('#mutations').checked ? '\n\nwindow.doMutationCheck = true;\n\n' : '';
-      const fetchEvent = `window.request = ${document.querySelector("#request").value};\n`;
-      const globals = `window.globals = ${document.querySelector("#globals").value};\n`;
-      const code = doDebug + doMutationsCheck + editor.value + fetchEvent + globals + mockServer;
-      const file = `<html><base href="${location.href}/tests"><script type="module">${code}<` + `/script></html>`;
-      const blob = new Blob([file], {type: "text/html"});
-      runner.src = URL.createObjectURL(blob);
+      const doDebug = document.querySelector('#debug').checked;
+      const doMutationsCheck = document.querySelector('#mutations').checked;
+      const request = JSON.parse(document.querySelector("#request").value);
+      const env = JSON.parse(document.querySelector("#globals").value);
+      let {functions, actions} = getCodeFromEditor();
+      const hash = encodeInstanceState(actions, functions, {request, env}, doDebug, doMutationsCheck);
+      document.querySelector('#runner').src = 'runner.html#' + hash;
     }
 
-
     function updateViewer(e) {
+      debugger
       document.querySelector('#viewer').src = 'debug.html#' + e.data;
     }
 
