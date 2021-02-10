@@ -95,8 +95,7 @@
       document.querySelector("#mutations").checked = !!state?.env?._debug;
       document.querySelector("#debug").checked = !!state?.env?._mutationCheck;
 
-      //todo viewer turned off
-      // document.querySelector("#viewer").src = 'debug.html#' + data;
+      document.querySelector("#viewer").src = 'debug.html#' + data;
     } catch (err) {
       console.error('render failed: ' + err);
     }

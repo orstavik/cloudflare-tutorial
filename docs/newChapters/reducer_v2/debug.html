@@ -312,9 +312,9 @@
 
   function init() {
     if (!location.hash) return;
-    const {actions, sequence, variables} = JSON.parse(atob(location.hash.substr(1)));
-    window.variables = variables;
-    model = computeOM(actions, sequence);
+    const {actions, trace, state, functions} = JSON.parse(atob(location.hash.substr(1)));
+    window.variables = state;
+    model = computeOM(actions, trace);
     step = 0;
     maxSteps = model[3].length - 1;
     updateView(model, variables, step);
@@ -324,7 +324,7 @@
     return nextStep > max ? min : nextStep < min ? max : nextStep;
   }
 
-  init();
+  setTimeout(init);
 
   window.addEventListener('hashchange', init);
 
