@@ -1,4 +1,12 @@
 <style>
+  #controls {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    border: 2px solid lightslategray;
+    background: white;
+    padding: .5em .5em .5em 1.5em;
+  }
   * {
     margin: 0;
     padding: 0;
@@ -12,148 +20,96 @@
     width: 100%;
     height: calc(100vh - 2em);
   }
-  #request {
-    width: 45%;
-    float: left;
-    height: calc(100% - 2em);
-  }
-  #env {
-    width: 45%;
-    float: left;
-    height: calc(100% - 2em);
-  }
-  #editor {
+  iframe:not(#runner) {
     width: 100%;
-    height: calc(100% - 2em);
-  }
-  #viewer {
-    width: 100vw;
     height: calc(100% - 2em);
   }
 </style>
 
+<ul id="controls">
+  <li>Debug in devtools: <input id="debug" type="checkbox"></li>
+  <li>Check for state mutations during actions: <input id="mutations" type="checkbox"></li>
+  <li><button id="run">Run!</button></li>
+</ul>
 <details>
   <summary>Input data</summary>
-  <textarea name="request" id="request"></textarea>
-  <textarea name="env" id="env"></textarea>
-  <textarea name="fullState" id="fullState" hidden></textarea>
-  <textarea name="trace" id="trace" hidden></textarea>
+  <iframe src="" frameborder="0" id="state"></iframe>
 </details>
 <details>
   <summary id="editorHeader">Editor.</summary>
-  <textarea name="editor" id="editor"></textarea>
+  <iframe src="" frameborder="0" id="editor"></iframe>
 </details>
-<details>
-  <summary onclick="event.target === this && event.preventDefault()">
-    <input id="debug" type="checkbox"> add debugger in devtools. ///////
-    <input id="mutations" type="checkbox"> doublecheck mutations in actions.
-    <button id="run" autofocus>Run!</button>
-  </summary>
-  <h3>Below comes warnings:</h3>
-  <pre id="warnings"></pre>
-  <h3>Below comes auto generated unit tests:</h3>
-  <pre id="units"></pre>
-  <iframe id="runner" hidden></iframe>
-</details>
+<iframe id="runner" hidden></iframe>
 <details open>
   <summary>View debugger</summary>
-  <iframe id="viewer" src="debug.html"></iframe>
+  <iframe id="viewer" src=""></iframe>
 </details>
 
 <script>
-  window.onload = async function () {
-    const tsts = await (await fetch('tests.json')).json();
-    const editor = document.querySelector("#editorHeader");
-    for (let [name, hash] of Object.entries(tsts)) {
-      const a = document.createElement('a');
-      a.href = '#' + hash;
-      a.innerText = name;
-      editor.appendChild(a);
-    }
-  }
-
-  function printEditableFunction([name, body]) {
-    if (body.startsWith('data:text/javascript,'))
-      return body.substr(21).replaceAll('\\\n', '\n').replaceAll('\"', '"') + '\n';
-    name = name[0] === '[' ? JSON.parse(name).join(', ') : name;
-    return `import {${name}} from "${body}";`;
-  }
-
-  function editorText(actions, functions) {
-    const functionsText = Object.entries(functions).map(printEditableFunction).join('\n');
-    const actionsText = `const actions = ${JSON.stringify(actions, null, 2)};`
-    return `${functionsText}\n${actionsText}`;
-  }
-
-  function render() {
+  function hashchange() {
     try {
       const data = location.hash.substr(1);
       console.log(data)
       const obj = JSON.parse(atob(data));
       console.log(obj);
       const {actions, functions, trace, state} = obj;
+      window.actions = actions;
+      window.functions = functions;
+      window.trace = trace;
+      window.state = state;
 
-      document.querySelector("#editor").value = editorText(actions, functions);
+      document.querySelector("#debug").checked = !!state?.env?._debug;
+      document.querySelector("#mutations").checked = !!state?.env?._mutationCheck;
 
-      document.querySelector("#trace").value = trace;
-
-      const request = JSON.stringify(state.request, null, 2);
-      const env = JSON.stringify(state.env, null, 2);
-      const fullState = JSON.stringify(state, null, 2);
-      document.querySelector("#request").value = request;
-      document.querySelector("#env").value = env;
-      document.querySelector("#fullState").value = fullState;
-      document.querySelector("#mutations").checked = !!state?.env?._debug;
-      document.querySelector("#debug").checked = !!state?.env?._mutationCheck;
-
+      document.querySelector("#state").src = 'stateView.html#' + data;
+      document.querySelector("#editor").src = 'textView.html#' + data;
       document.querySelector("#viewer").src = 'debug.html#' + data;
     } catch (err) {
       console.error('render failed: ' + err);
     }
   }
 
-  addEventListener('hashchange', render);
-  render();
+  addEventListener('hashchange', hashchange);
 
-  //todo only encrypting all the functions in one big bite here..
-  //todo should make these entries individual per function to much better support automatic unit tests.
-  //todo and ml
-  //todo and smart ide that might based on a series of unit tests suggest functions that you can replace your functions with.
-  function getCodeFromEditor(text) {
-    let [code, actions] = text.split('const listOfActions =');
-    actions = JSON.parse(actions.substr(0, actions.length - 1));
-    const keys = JSON.stringify(actions.map(([p, fun]) => fun));
-    const functions = {};
-    functions[keys] = "data:text/javascript,\\\n" + code.replaceAll('\n', '\\\n').replaceAll('"', '\\"');
-    return {functions, actions};
-  }
 
-  //todo this method is what runs when something changes in the editor
   function updateHash() {
-    const request = JSON.parse(document.querySelector("#request").value);
-    const env = JSON.parse(document.querySelector("#env").value);
-    const fullState = JSON.parse(document.querySelector("#fullState").value);
-    const _mutationCheck = document.querySelector("#mutations").checked;
-    const _debug = document.querySelector("#debug").checked;
-    const codeText = document.querySelector("#editor").value.trim();
-    const trace = document.querySelector("#trace").value;
-
-    const {functions, actions} = getCodeFromEditor(codeText);
-    const state = Object.assign(fullState, {request, env}, {env: {_debug, _mutationCheck}});
-    const data = {actions, functions, state, trace};
+    window.state.env._debug = document.querySelector("#debug").checked;
+    window.state.env._mutationCheck = document.querySelector("#mutations").checked;
+    const data = {actions: window.actions, functions: window.functions, state, trace: window.trace};
     const hash = btoa(JSON.stringify(data));
     location.hash = "#" + hash;
   }
+  addEventListener('change', updateHash, true);
 
   document.querySelector("#run").addEventListener('click', function () {
     document.querySelector('#runner').src = 'runner.html' + location.hash;
   });
 
   addEventListener('message', e => location.hash = '#' + e.data);
+
+  window.onload = async function () {
+    const tsts = await (await fetch('tests.json')).json();
+    const editor = document.querySelector("#controls");
+    for (let [name, hash] of Object.entries(tsts)) {
+      const a = document.createElement('a');
+      a.href = '#' + hash;
+      a.innerText = name;
+      const li = document.createElement('li');
+      li.appendChild(a);
+      editor.appendChild(li);
+    }
+    hashchange();
+  }
 </script>
 
 <pre hidden>
-todo the purpose of the reducer pattern is to make the logic more declarative.
+    //todo only encrypting all the functions in one big bite here..
+  //todo should make these entries individual per function to much better support automatic unit tests.
+  //todo and ml
+  //todo and smart ide that might based on a series of unit tests suggest functions that you can replace your functions with.
+
+
+  todo the purpose of the reducer pattern is to make the logic more declarative.
 
 e is the state, but because it is async, we must decorate the state, and not replace it.
 reducer is a pure(-ish) function. It can get data from outside, and it can use only the data in the incoming state.

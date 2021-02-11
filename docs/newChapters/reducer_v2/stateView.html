@@ -1,0 +1,26 @@
+<h1>Here comes the text:</h1>
+<textarea style="width: 100%; height: 30em;"></textarea>
+<script>
+  const pre = document.querySelector("textarea");
+
+  function hashToText() {
+    const data = location.hash.substr(1);
+    const obj = JSON.parse(atob(data));
+    const {actions, functions, state, trace} = obj;
+    window.actions = actions || [];
+    window.functions = functions || {};
+    window.trace = trace || '';
+    pre.value = JSON.stringify(state || {}, null, 2);
+  }
+
+  addEventListener("hashchange", hashToText);
+  hashToText();
+
+  function textToMessage(){
+    const state = JSON.parse(pre.value);
+    const hash = JSON.stringify({actions, functions, state, trace});
+    window.parent.postMessage(hash, '*');
+  }
+
+  window.addEventListener("change", textToMessage);
+</script>

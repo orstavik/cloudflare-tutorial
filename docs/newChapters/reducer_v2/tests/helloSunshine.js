@@ -6,7 +6,7 @@ export function helloSunshine(a) {
   return 'HelloSunshine: ' + a;
 }
 
-const listOfActions = [
+const actions = [
   [["request"], "getUrl", "url"],
   [["url"], "helloSunshine", "response"]
 ];
