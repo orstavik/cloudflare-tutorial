@@ -49,9 +49,9 @@
   function hashchange() {
     try {
       const data = location.hash.substr(1);
-      console.log(data)
+      // console.log(data)
       const obj = JSON.parse(atob(data));
-      console.log(obj);
+      console.log(obj.functions);
       const {actions, functions, trace, state} = obj;
       window.actions = actions;
       window.functions = functions;
@@ -82,6 +82,7 @@
   addEventListener('change', updateHash, true);
 
   document.querySelector("#run").addEventListener('click', function () {
+    document.querySelector('#runner').src = '';
     document.querySelector('#runner').src = 'runner.html' + location.hash;
   });
 

@@ -4,6 +4,7 @@
 
   function debug(frame) {
     frame.functions = window.functions;
+    console.log(frame)
     const msg = frameToString(frame);
     window.parent.postMessage(msg, '*');
   }
@@ -81,14 +82,14 @@
 
   (async function init() {
     let {functions, actions, state} = JSON.parse(atob(location.hash.substr(1)));
-    functions = await loadFunctions(functions);
-    actions = compile(actions);
-    actions.forEach(action => action[2] = functions[action[2]]);  //link up functions in actions
-    window.actions = actions;
     window.functions = functions;
+    const declarations = await loadFunctions(functions);
+    actions = compile(actions);
+    actions.forEach(action => action[2] = declarations[action[2]]);  //link up functions in actions
+    window.actions = actions;
 
     //update environment the settings.
-    linkFunctionState(state, functions);
+    linkFunctionState(state, declarations);
     window.cbs = [];
     state?.env?._debug && window.cbs.push(debug);
     state?.env?._mutationCheck && window.cbs.push(checkMutations);
