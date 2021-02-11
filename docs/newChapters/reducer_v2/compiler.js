@@ -1,3 +1,4 @@
+
 // todo
 // 1. syntax check for dead end states. We do this by checking each action. If the action is missing a required state (ie. a required state is neither an output of any other action, or a start variable), then we remove this action. We repeat this function recursively until there are no such actions removed in an entire pass). This will remove any loose ends. This can be done at compile time.
 //2. if this removes response, or any observers, then this will of course clear the way for any errors.
@@ -41,6 +42,7 @@ const operators = {
               return this._cache[key] = value;
             throw 'Expected Error, cache function is triggering alternative path.';
           }
+          //todo add the reduction of the cache according to operator arguments...
           return this._cache[key] = value;
         }
       }._function
@@ -56,7 +58,7 @@ const operators = {
           const key = JSON.stringify(keys.length ? keys : keys[0]);
           if (value === EMPTY)
             throw 'Expected Error, goldenMean function is triggering alternative path.';
-          if(typeof value !== 'number' )
+          if (typeof value !== 'number')
             throw 'goldenMean only tackle number values.';
           const nums = this._cache[key] || (this._cache[key] = []);
           nums.push(value);
@@ -69,11 +71,11 @@ const operators = {
   },
 }
 
-// [!...params], fun,!out, error
+// [!...params], !fun, out, error
 //
 //   becomes
-//                                                                                 //todo as it is right now, the fun cannot return undefined..
-// [empty, "out", ...bangparams], cache, out, _notInCacheID.                     //todo should I employ a separate 'empty' primitive?
+//
+// [empty, "out", ...bangparams], cache, out, _notInCacheID.
 // [...params, &_notInCacheID], fun, _putInCacheID, error.
 // [_putInCacheID, "out", ...bangparams], cache, out, _errorPutInCacheID.
 //
@@ -82,37 +84,44 @@ const operators = {
 //_notInCacheID is `_notInCache${actionId}`
 //_putInCacheID is `_putInCache${actionId}`
 function convertCacheOperator([id, params, fun, output, error], OP, funName, opName) {
-  output = output.substr(OP.length);
-  const bangParams = params.filter(p => p.op === OP).map(({op, key}) => ({op: '', key}));
-  params = params.map(({op, key}) => ({op: op === OP ? '' : op, key})); //replace only the operator from the params
+  fun = fun.substr(OP.length);
+  const bangParams = params.filter(p => p.startsWith(OP)).map(p => p.substr(OP.length));
+  params = params.map(p => p.substr(OP.length));                                         //replace only the operator from the params
   const _notInCacheID = `_notIn${opName + id}`;
   const _putInCacheID = `_putIn${opName + id}`;
   const _errorPutInCacheID = `_errorPutIn${id}`;
   return [
     [id + OP + 1, [EMPTY, `"${output}"`, ...bangParams], funName, output, _notInCacheID],
-    [id + OP + 2, [...params, {op: '&', key: _notInCacheID}], fun, _putInCacheID, error],
-    [id + OP + 3, [{op: '', key: _putInCacheID}, `"${output}"`, ...bangParams], funName, output, _errorPutInCacheID]
+    [id + OP + 2, [...params, '&' + _notInCacheID], fun, _putInCacheID, error],
+    [id + OP + 3, [_putInCacheID, `"${output}"`, ...bangParams], funName, output, _errorPutInCacheID]
   ];
 }
 
 function compileCacheActions(actions, operators) {
   let res = [];
-  for (let OP in operators) {
-    const {funName, opName, fun} = operators[OP]; //todo here we have the fun, we could add that only if we need it.
-    for (let action of actions) {
-      if (action[3][0] === '!')
-        res = res.concat(convertCacheOperator(action, OP, funName, opName));
-      else
-        res.push(action);
+  //todo add the functions that we are using here.
+  //we can do this for 'get' too.
+  // let funs = [];
+  main: for (let action of actions) {
+    for (let OP in operators) {
+      const {funName, opName, fun} = operators[OP];
+      if (!action[2].startsWith(OP))
+        continue;
+      // funs.push(fun);
+      res = res.concat(convertCacheOperator(action, OP, funName, opName));
+      continue main;
     }
+    res.push(action);
   }
   return res;
+  // return {functions: funs, actions: res};
 }
 
 export function compile(actions) {
+  actions = compileCacheActions(actions, operators);
   actions = normalizeIdObserversMissingErrors(actions);
   actions.forEach(action => action[1] = action[1].map(p => parseParam(p)));
-  return compileCacheActions(actions, operators);
+  return actions;
 }
 
 /**

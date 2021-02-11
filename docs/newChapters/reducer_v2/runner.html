@@ -1,114 +1,98 @@
-<script id="dynamo" type="module"></script>
+<script type="module">
+  import {handleResponse, stateMachine} from "./ResponseRace.js";
+  import {compile} from "./compiler.js";
 
-<script type="module">import {handleResponse, stateMachine} from "./ResponseRace.js";
-
-function debug(frame) {
-  const msg = frameToString(frame);
-  console.log(msg);
-  window.parent.postMessage(msg, '*');
-}
-
-function frameToString({actions, state: context, sequence}) {
-  actions = actions.map(([id, params, fun, output, error]) => [params.map(p => p instanceof Object ? p.op + p.key : typeof (p) === 'string' ? JSON.stringify(p) : p), fun.name, output, error]);
-  const state = {};
-  for (let key in context)
-    state[key] = context[key] === undefined ? null : context[key];
-  return btoa(JSON.stringify({actions, functions: window.functions, trace: sequence, state: state}));
-  //todo ugly hack to put the functions back into the stack trace.
-}
-
-let previous;
-
-function checkMutations(frame) {
-  if (!previous) {
-    previous = {};
-    frame.state._mutations = {};
-    for (let key in frame.state)
-      previous[key] = JSON.stringify(frame.state[key]);
-    return;
+  function debug(frame) {
+    frame.functions = window.functions;
+    const msg = frameToString(frame);
+    window.parent.postMessage(msg, '*');
   }
-  const res = {}, diff = [];
-  for (let key in frame.state) {
-    res[key] = JSON.stringify(frame.state[key]);
-    previous[key] !== res[key] && (diff.push([key, previous[key], res[key]]));
+
+  function frameToString({actions, functions, state: context, trace: sequence}) {
+    actions = actions.map(([id, params, fun, output, error]) => [params.map(p => p instanceof Object ? p.op + p.key : typeof (p) === 'string' ? JSON.stringify(p) : p), fun.name, output, error]);
+    const state = {};
+    for (let key in context)
+      state[key] = context[key] === undefined ? null : context[key];
+    return btoa(JSON.stringify({actions, functions, trace: sequence, state: state}));
+    //todo ugly hack to put the functions back into the stack trace.
   }
-  previous = res;                      //todo rename sequence to trace
-  if (diff.length > 1) {               //todo this is untested!! todo don't exactly know how to update the sequence here..
-    const i = Object.keys(frame.state._mutations).length;
-    frame.state._mutations[i] = diff;
-    frame.sequence += '_M' + i;
+
+  let previous;
+
+  function checkMutations(frame) {
+    if (!previous) {
+      previous = {};
+      frame.state._mutations = {};
+      for (let key in frame.state)
+        previous[key] = JSON.stringify(frame.state[key]);
+      return;
+    }
+    const res = {}, diff = [];
+    for (let key in frame.state) {
+      res[key] = JSON.stringify(frame.state[key]);
+      previous[key] !== res[key] && (diff.push([key, previous[key], res[key]]));
+    }
+    previous = res;                      //todo rename sequence to trace
+    if (diff.length > 1) {               //todo this is untested!! todo don't exactly know how to update the sequence here..
+      const i = Object.keys(frame.state._mutations).length;
+      frame.state._mutations[i] = diff;
+      frame.sequence += '_M' + i;
+    }
+    return diff;
   }
-  return diff;
-}
 
-window.debug = debug;
-window.checkMutations = checkMutations;
+  window.debug = debug;
+  window.checkMutations = checkMutations;
 
-//adding mock methods for the fetch event
-addEventListener('fetch', e => {
-  e.passThroughOnException = () => console.log('passThroughOnException.');
-  e.waitUntil = async data => console.log('waitUntil: ', await data);
-  e.respondWith = async data => console.log('respondWith: ', await data);
-});
+  //adding mock methods for the fetch event
+  addEventListener('fetch', e => {
+    e.passThroughOnException = () => console.log('passThroughOnException.');
+    e.waitUntil = async data => console.log('waitUntil: ', await data);
+    e.respondWith = async data => console.log('respondWith: ', await data);
 
-function printParam(p) {
-  if (p instanceof Object)
-    return `"${p.op}${p.key}"`;
-  if (typeof p === 'string')
-    return JSON.stringify(p);
-  return p;
-}
+    const {response, observer} = stateMachine(window.actions, e.state, window.cbs);
+    handleResponse(e, response, observer);
+  });
 
-function printAction(action) {
-  const [params, fun, output, error] = action;
-  return `[[${params.map(printParam).join(', ')}], ${fun}, '${output}', '${error}']`;
-}
+  async function loadFunctions(functions) {
+    const res = {};
+    for (let rawkey in functions) {
+      const importUrl = functions[rawkey];
+      let declarations = await import(importUrl.replaceAll('\\\n', '\n').replaceAll('\"', '"'));
+      for (let key of JSON.parse(rawkey))
+        res[key] = declarations[key];
+    }
+    return res;
+  }
 
-function printFunction([key, value]) {
-  if (key[0] === '[')
-    key = JSON.parse(key).join(', ');
-  return `import {${key}} from "${value}";`;
-}
+  function linkFunctionState(state, functions) {
+    if (!state._functions)
+      return;
+    for (let funName in state._functions) {
+      if (!(funName in functions))
+        continue;                              //setting test values on a function that is not loaded.
+      const funSettings = state._functions[funName];
+      for (let [setting, startValue] of Object.entries(funSettings)) {
+        startValue !== undefined && (functions[funName][setting] = startValue);
+        state._functions[funName][setting] = functions[funName][setting];
+      }
+    }
+  }
 
-function decodeInstanceState(txt) {
-  return JSON.parse(atob(txt));
-}
+  (async function init() {
+    let {functions, actions, state} = JSON.parse(atob(location.hash.substr(1)));
+    functions = await loadFunctions(functions);
+    actions = compile(actions);
+    actions.forEach(action => action[2] = functions[action[2]]);  //link up functions in actions
+    window.actions = actions;
+    window.functions = functions;
 
-function printFunctions(functions) {
-  return Object.entries(functions).map(printFunction).join('\\n')
-}
+    //update environment the settings.
+    linkFunctionState(state, functions);
+    window.cbs = [];
+    state?.env?._debug && window.cbs.push(debug);
+    state?.env?._mutationCheck && window.cbs.push(checkMutations);
 
-addEventListener('fetch', e => {
-  console.log(e);
-  const {response, observer} = stateMachine(window.actions, e.startState, window.cbs);
-  handleResponse(e, response, observer);
-});
-
-(function init() {
-  const dynamo = document.querySelector("#dynamo");
-  const {functions, actions, state} = decodeInstanceState(location.hash.substr(1));
-  const textContent = printCode(functions, actions, state, state?.env?._debug, state?.env?._mutationCheck);
-  dynamo.textContent = textContent;
-})();
-
-function printCode(functions, actions, state, debug, mutationsCheck) {
-  return `
-import {compile} from "./compiler.js";
-
-window.functions = ${JSON.stringify(functions, null, 2)};
-
-${printFunctions(functions)}
-
-const actions = [
-  ${actions.map(printAction).join(',\n  ')}
-];
-window.actions = compile(actions);
-
-window.cbs = [${((mutationsCheck ? 'checkMutations, ' : '') + (debug ? 'debug, ' : ''))}];
-
-const startState = ${JSON.stringify(state, null, 2)};
-
-dispatchEvent(Object.assign(new Event('fetch'), {startState}));`;
-}
-
+    dispatchEvent(Object.assign(new Event('fetch'), {state}));
+  })();
 </script>

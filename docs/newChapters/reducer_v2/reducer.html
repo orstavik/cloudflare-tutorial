@@ -31,6 +31,7 @@
     height: calc(100% - 2em);
   }
 </style>
+
 <details>
   <summary>Input data</summary>
   <textarea name="request" id="request"></textarea>
@@ -39,11 +40,7 @@
   <textarea name="trace" id="trace" hidden></textarea>
 </details>
 <details>
-  <summary id="editorHeader">Editor.
-    <a href="#test1.js">test1.js</a>/
-    <a href="#helloSunshine.js">helloSunshine.js</a>/
-    <a href="#eyJhY3Rpb25zIjpbW1sicmVxdWVzdCJdLCJnZXRVcmwiLCJ1cmwiLCJ1bmRlZmluZWQiXSxbWyJ1cmwiXSwiaGVsbG9TdW5zaGluZSIsInJlc3BvbnNlIiwidW5kZWZpbmVkIl1dLCJmdW5jdGlvbnMiOnsiW1wiZ2V0VXJsXCIsXCJoZWxsb1N1bnNoaW5lXCJdIjoiZGF0YTp0ZXh0L2phdmFzY3JpcHQsXFxcbmV4cG9ydCBmdW5jdGlvbiBnZXRVcmwoYSkge1xcXG4gIHJldHVybiBhLnVybDtcXFxufVxcXG5cXFxuZXhwb3J0IGZ1bmN0aW9uIGhlbGxvU3Vuc2hpbmUoYSkge1xcXG4gIHJldHVybiAnSGVsbG9TdW5zaGluZTogJyArIGE7XFxcbn1cXFxuXFxcbiJ9LCJ0cmFjZSI6IjowX2lvOjFfaW8iLCJzdGF0ZSI6eyJyZXF1ZXN0Ijp7InVybCI6Imh0dHBzOi8vdmcubm8vZXJyb3IifSwiZW52Ijp7ImNhY2hlMyI6eyIxIjp7InN1Y2Nlc3MiOiJzdW5zaGlueSBkYXkifX0sIl9kZWJ1ZyI6dHJ1ZSwiX211dGF0aW9uQ2hlY2siOnRydWV9LCJ1cmwiOiJodHRwczovL3ZnLm5vL2Vycm9yIiwiX211dGF0aW9ucyI6e30sInJlc3BvbnNlIjoiSGVsbG9TdW5zaGluZTogaHR0cHM6Ly92Zy5uby9lcnJvciJ9fQ==">helloSunshine has run</a>
-  </summary>
+  <summary id="editorHeader">Editor.</summary>
   <textarea name="editor" id="editor"></textarea>
 </details>
 <details>
@@ -62,7 +59,18 @@
   <summary>View debugger</summary>
   <iframe id="viewer" src="debug.html"></iframe>
 </details>
+
 <script>
+  window.onload = async function () {
+    const tsts = await (await fetch('tests.json')).json();
+    const editor = document.querySelector("#editorHeader");
+    for (let [name, hash] of Object.entries(tsts)) {
+      const a = document.createElement('a');
+      a.href = '#' + hash;
+      a.innerText = name;
+      editor.appendChild(a);
+    }
+  }
 
   function printEditableFunction([name, body]) {
     if (body.startsWith('data:text/javascript,'))
@@ -80,7 +88,10 @@
   function render() {
     try {
       const data = location.hash.substr(1);
-      const {actions, functions, trace, state} = JSON.parse(atob(data));
+      console.log(data)
+      const obj = JSON.parse(atob(data));
+      console.log(obj);
+      const {actions, functions, trace, state} = obj;
 
       document.querySelector("#editor").value = editorText(actions, functions);
 
