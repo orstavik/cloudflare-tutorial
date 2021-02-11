@@ -26,8 +26,8 @@ export function handleResponse(fetchEvent, response, observer) {
   }());
 }
 
-function findUnresolvedObserver({actions, variables}) {
-  return actions.find(([id, p, f, output, error]) => output.startsWith('_observer_') && !(output in variables) && !(error in variables));
+function findUnresolvedObserver({actions, state}) {
+  return actions.find(([id, p, f, output, error]) => output.startsWith('_observer_') && !(output in state) && !(error in state));
 }
 
 function findActionThatCanOutputResponse(actions) {
@@ -35,17 +35,17 @@ function findActionThatCanOutputResponse(actions) {
 }
 
 //The stateMachine a) starts the inner statemachine and b) monitors the state of the response and observers.
-export function stateMachine(actions, variables, cbs) {
+export function stateMachine(actions, state, cbs) {
   const postFrame = cbs.slice();
-  const frame = {actions, remainingActions: actions.slice(), variables, sequence: '', cbs, postFrame};
+  const frame = {actions, remainingActions: actions.slice(), state, trace: '', cbs, postFrame};
   run(frame);
 
   //setting up response and observer callbacks
-  let response = variables.response;
-  if (!('response' in variables) && findActionThatCanOutputResponse(actions)) {
+  let response = state.response;
+  if (!('response' in state) && findActionThatCanOutputResponse(actions)) {
     let resolverResponse;
     response = new Promise(r => resolverResponse = r);
-    const checkResponse = () => 'response' in variables && postFrame.splice(postFrame.indexOf(checkResponse), 1) && resolverResponse(variables.response);
+    const checkResponse = () => 'response' in state && postFrame.splice(postFrame.indexOf(checkResponse), 1) && resolverResponse(state.response);
     postFrame.push(checkResponse);
   }
   let observer;

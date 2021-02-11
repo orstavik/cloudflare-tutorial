@@ -20,8 +20,8 @@ function firstReadyAction(frame) {
     for (let p of action[1]) {
       if (!(p instanceof Object))
         args.push(p);
-      else if (p.op === '*' || p.key in frame.variables)
-        p.op !== '&' && args.push(frame.variables[p.key]);
+      else if (p.op === '*' || p.key in frame.state)
+        p.op !== '&' && args.push(frame.state[p.key]);
       else
         continue main;
     }
@@ -32,18 +32,18 @@ function firstReadyAction(frame) {
 }
 
 function asyncActionReturns(frame, callTxt, key, val) {
-  if (key in frame.variables)
-    return frame.sequence += callTxt + 'b';
+  if (key in frame.state)
+    return frame.trace += callTxt + 'b';
   setValue(frame, callTxt, key, val);
   run(frame);
 }
 
 function setValue(frame, callTxt, key, val) {
-  frame.sequence += callTxt;
-  frame.variables[key] = val;
+  frame.trace += callTxt;
+  frame.state[key] = val;
   frame.remainingActions = frame.remainingActions.filter(([id, params, _, output]) => {
     if (output === key || params.find(({op, key: p}) => op === '&&' && p === key)) {
-      frame.sequence += `:${id}_c`;
+      frame.trace += `:${id}_c`;
       return false;
     }
     return true;
@@ -58,11 +58,11 @@ function setValue(frame, callTxt, key, val) {
 export function run(frame) {
   for (let {action, args} = firstReadyAction(frame); action; {action, args} = firstReadyAction(frame)) {
     const [id, params, fun, output, error] = action;
-    frame.sequence += `:${id}_i`; //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
+    frame.trace += `:${id}_i`; //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
     frame.preInvoke && frame.preInvoke.forEach(fun => fun(frame));
     const result = runFun(fun, args);
     if (result.success instanceof Promise) {
-      frame.sequence += 'a';
+      frame.trace += 'a';
       result.success.then(val => asyncActionReturns(frame, `:${id}_o`, output, val));
       result.error.then(val => asyncActionReturns(frame, `:${id}_e`, error, val));
     } else if ('success' in result) {

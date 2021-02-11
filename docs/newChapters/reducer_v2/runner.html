@@ -8,12 +8,12 @@ function debug(frame) {
   window.parent.postMessage(msg, '*');
 }
 
-function frameToString({actions, variables: context, sequence}) {
+function frameToString({actions, state: context, sequence}) {
   actions = actions.map(([id, params, fun, output, error]) => [params.map(p => p instanceof Object ? p.op + p.key : typeof (p) === 'string' ? JSON.stringify(p) : p), fun.name, output, error]);
-  const variables = {};
+  const state = {};
   for (let key in context)
-    variables[key] = context[key] === undefined ? null : context[key];
-  return btoa(JSON.stringify({actions, functions: window.functions, trace: sequence, state: variables}));
+    state[key] = context[key] === undefined ? null : context[key];
+  return btoa(JSON.stringify({actions, functions: window.functions, trace: sequence, state: state}));
   //todo ugly hack to put the functions back into the stack trace.
 }
 
@@ -22,20 +22,20 @@ let previous;
 function checkMutations(frame) {
   if (!previous) {
     previous = {};
-    frame.variables._mutations = {};
-    for (let key in frame.variables)
-      previous[key] = JSON.stringify(frame.variables[key]);
+    frame.state._mutations = {};
+    for (let key in frame.state)
+      previous[key] = JSON.stringify(frame.state[key]);
     return;
   }
   const res = {}, diff = [];
-  for (let key in frame.variables) {
-    res[key] = JSON.stringify(frame.variables[key]);
+  for (let key in frame.state) {
+    res[key] = JSON.stringify(frame.state[key]);
     previous[key] !== res[key] && (diff.push([key, previous[key], res[key]]));
   }
   previous = res;                      //todo rename sequence to trace
   if (diff.length > 1) {               //todo this is untested!! todo don't exactly know how to update the sequence here..
-    const i = Object.keys(frame.variables._mutations).length;
-    frame.variables._mutations[i] = diff;
+    const i = Object.keys(frame.state._mutations).length;
+    frame.state._mutations[i] = diff;
     frame.sequence += '_M' + i;
   }
   return diff;
