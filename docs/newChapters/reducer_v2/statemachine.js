@@ -37,9 +37,10 @@ function trace(frame, id, txt) {
     previous[1] += txt;
   else
     frame.trace.push([id, txt]);
-  //todo this function always run at trace points. We can then add functions here that will be alerted when certain trace conditions occurs
-  // if(txt.matches(oneOfTheFilters))
-  //   console.log(frame);
+  for (let [key, tracers] of Object.entries(frame.tracers)) {
+    if(txt.indexOf(key) >= 0 && tracers instanceof Array)        //todo this is very inefficient currently. Bad format for writing the query.
+      tracers.forEach(fun=>fun(frame));
+  }
 }
 
 function asyncActionReturns(frame, id, callTxt, key, val) {
@@ -65,14 +66,14 @@ function setValue(frame, id, callTxt, key, val) {
   // 'response' and _observer_s are such states, that will be run.
   // There should be a rule that says that loose ends will be cleaned up and removed whenever possible.
   // If you want to have a state that is to be left as a loose end, we need to give this a prefix.
-  frame.postFrame && frame.postFrame.forEach(fun => fun(frame));
+  // frame.postFrame && frame.postFrame.forEach(fun => fun(frame));
 }
 
 export function run(frame) {
   for (let {action, args} = firstReadyAction(frame); action; {action, args} = firstReadyAction(frame)) {
     const [id, params, fun, output, error] = action;
     trace(frame, id, `i`); //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
-    frame.preInvoke && frame.preInvoke.forEach(fun => fun(frame));
+    // frame.preInvoke && frame.preInvoke.forEach(fun => fun(frame));
     const result = runFun(fun, args);
     if (result.success instanceof Promise) {
       trace(frame, id, 'a');

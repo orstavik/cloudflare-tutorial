@@ -36,8 +36,9 @@ function findActionThatCanOutputResponse(actions) {
 
 //The stateMachine a) starts the inner statemachine and b) monitors the state of the response and observers.
 export function stateMachine(actions, state, cbs) {
-  const postFrame = cbs.slice();
-  const frame = {actions, remainingActions: actions.slice(), state, trace: [], cbs, postFrame};
+  // const postFrame = cbs.slice();
+  const tracers = {'i': cbs, 'e': cbs, 'o': cbs};
+  const frame = {actions, remainingActions: actions.slice(), state, trace: []/*, cbs, postFrame*/, tracers};
   run(frame);
 
   //setting up response and observer callbacks
@@ -45,15 +46,17 @@ export function stateMachine(actions, state, cbs) {
   if (!('response' in state) && findActionThatCanOutputResponse(actions)) {
     let resolverResponse;
     response = new Promise(r => resolverResponse = r);
-    const checkResponse = () => 'response' in state && postFrame.splice(postFrame.indexOf(checkResponse), 1) && resolverResponse(state.response);
-    postFrame.push(checkResponse);
+    tracers.r = [()=> resolverResponse(state.response)];
+    // const checkResponse = () => 'response' in state && postFrame.splice(postFrame.indexOf(checkResponse), 1) && resolverResponse(state.response);
+    // postFrame.push(checkResponse);
   }
   let observer;
   if (findUnresolvedObserver(frame)) {
     let resolverObservers;
     observer = new Promise(r => resolverObservers = r);
-    const checkObservers = () => !findUnresolvedObserver(frame) && postFrame.splice(postFrame.indexOf(checkObservers, 1)) && resolverObservers(true);
-    postFrame.push(checkObservers);
+    tracers.l = [()=>resolverObservers(true)];
+    // const checkObservers = () => !findUnresolvedObserver(frame) && postFrame.splice(postFrame.indexOf(checkObservers, 1)) && resolverObservers(true);
+    // postFrame.push(checkObservers);
   }
 
   return {response, observer};
