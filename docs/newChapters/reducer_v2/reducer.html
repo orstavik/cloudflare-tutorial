@@ -51,7 +51,7 @@
       const data = location.hash.substr(1);
       console.log(data)
       const obj = JSON.parse(atob(data));
-      console.log(obj.trace);
+      console.log(obj);
       const {actions, functions, trace, state} = obj;
       window.actions = actions;
       window.functions = functions;
@@ -70,7 +70,6 @@
   }
 
   addEventListener('hashchange', hashchange);
-
 
   function updateHash() {
     window.state.env._debug = document.querySelector("#debug").checked;

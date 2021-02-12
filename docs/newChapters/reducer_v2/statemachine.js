@@ -38,18 +38,20 @@ function trace(frame, id, txt) {
 
 function asyncActionReturns(frame, id, callTxt, key, val) {
   if (key in frame.state)
-    return trace(frame, id, callTxt + 'b');
+    return trace(frame, id, callTxt.toUpperCase());
   setValue(frame, id, callTxt, key, val);
   run(frame);
 }
 
 function setValue(frame, id, callTxt, key, val) {
   frame.state[key] = val;
-  //custom trace code for ResponseRace machine
-  key === 'response' && (callTxt += 'r');
-  key.startsWith('_observer') && !frame.remainingActions.filter(([i, p, f, out]) => out.startsWith('_observer')).length && (callTxt += 'l');
-  //custom trace code for ResponseRace machine ends
   trace(frame, id, callTxt);
+  //custom trace codes for ResponseRace machine. todo move this out to ResponseRace again as tracers that look for 'e' or 'o'
+  if (key === 'response')
+    trace(frame, id, 'r');
+  if (key.startsWith('_observer') && !frame.remainingActions.filter(([i, p, f, out]) => out.startsWith('_observer')).length)
+    trace(frame, id, 'l');
+  //custom trace code for ResponseRace machine ends
   frame.remainingActions = frame.remainingActions.filter(([id, params, _, output]) => {
     if (output === key || params.find(({op, key: p}) => op === '&&' && p === key)) {
       trace(frame, id, `c`);

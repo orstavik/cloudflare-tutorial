@@ -23,6 +23,7 @@
 
   function frameToString({actions, functions, state: context, trace}) {
     trace = minimizeTraceList(trace);
+    trace = trace.map(([id, txt]) => [id, txt.replace('E', 'eb').replace('O', 'ob')]);  //todo this is not so good.
 
     trace = trace.map(idTxt => ':' + idTxt.join('_')).join('');
     actions = actions.map(([id, params, fun, output, error]) => [params.map(p => p instanceof Object ? p.op + p.key : typeof (p) === 'string' ? JSON.stringify(p) : p), fun.name, output, error]);
@@ -67,7 +68,7 @@
     e.waitUntil = async data => console.log('waitUntil: ', await data);
     e.respondWith = async data => console.log('respondWith: ', await data);
 
-    const {response, observer} = stateMachine(window.actions, e.state, window.cbs);
+    const {response, observer} = stateMachine(window.actions, e.state, window.tracers);
     handleResponse(e, response, observer);
   });
 
@@ -106,9 +107,15 @@
 
     //update environment the settings.
     linkFunctionState(state, declarations);
-    window.cbs = [];
-    state?.env?._debug && window.cbs.push(debug);
-    state?.env?._mutationCheck && window.cbs.push(checkMutations);
+    const cbs = [];
+    state?.env?._debug && cbs.push(debug);
+    state?.env?._mutationCheck && cbs.push(checkMutations);
+    const cb = (frame)=>cbs.forEach(fun=>fun(frame));
+    window.tracers = {
+      'i': cb,
+      'e': cb,
+      'o': cb
+    };
 
     dispatchEvent(Object.assign(new Event('fetch'), {state}));
   })();
