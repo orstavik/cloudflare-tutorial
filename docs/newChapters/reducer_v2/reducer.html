@@ -49,9 +49,9 @@
   function hashchange() {
     try {
       const data = location.hash.substr(1);
-      // console.log(data)
+      console.log(data)
       const obj = JSON.parse(atob(data));
-      console.log(obj.functions);
+      console.log(obj.trace);
       const {actions, functions, trace, state} = obj;
       window.actions = actions;
       window.functions = functions;
