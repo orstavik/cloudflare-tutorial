@@ -1,4 +1,3 @@
-
 // todo
 // 1. syntax check for dead end states. We do this by checking each action. If the action is missing a required state (ie. a required state is neither an output of any other action, or a start variable), then we remove this action. We repeat this function recursively until there are no such actions removed in an entire pass). This will remove any loose ends. This can be done at compile time.
 //2. if this removes response, or any observers, then this will of course clear the way for any errors.
@@ -97,12 +96,48 @@ function convertCacheOperator([id, params, fun, output, error], OP, funName, opN
   ];
 }
 
+// [something, bob, test1, test2, test3], fun, [case1, case2, case3], else
+//
+//   becomes
+//
+// [something, bob, test1], fun, case1, _else_ID_0
+// [something, bob, test2, &_else_ID_0, &&case1], fun, case2, _else_ID_1
+// [something, bob, test3, &_else_ID_1, &&case1, &&case2], fun, case3, else
+
+// [something, test1, test2, test3], equals, [case1, case2, case3], else
+//
+//   becomes
+//
+// [something, test1], equals, case1, _else_ID_1
+// [something, test2, &_else_ID_1, &&case1], equals, case2, _else_ID_2
+// [something, test3, &_else_ID_2, &&case1, &&case2], equals, case3, else
+//todo untested
+
+function convertArrayOutput(action) {
+  let [id, params, fun, output, error] = action;
+  id = id + 'x';
+  const otherArgs = params.slice(0, params.length - output.length);
+  return output.map((caseI, i) => {
+    const testI = params[otherArgs.length + i];
+    const ps = [...otherArgs, testI];
+    i && ps.push(`&_else_${id}_${i}`);
+    for (let j = i; j > 0; j--)
+      ps.push('&&' + output[j - 1]);
+    const alternative = i + 1 === output.length ? error : `_else_${id}${i + 1}`;
+    return [id + i, ps, fun, caseI, alternative];
+  });
+}
+
 function compileCacheActions(actions, operators) {
   let res = [];
   //todo add the functions that we are using here.
-  //we can do this for 'get' too.
+  //we can do this for 'get' too.                      
   // let funs = [];
   main: for (let action of actions) {
+    if (action[3] instanceof Array) {
+      res = res.concat(convertArrayOutput(action))
+      continue main;
+    }
     for (let OP in operators) {
       const {funName, opName, fun} = operators[OP];
       if (!action[2].startsWith(OP))
@@ -129,18 +164,25 @@ export function compile(actions) {
  */
 // first:  a => a
 // fail:   a => throw a
-export function get(obj, path) {
-  if (path === '')
+export const BUILTIN = {
+  get: function get(obj, path) {
+    if (!path)
+      return obj;
+    if (!(obj instanceof Object))
+      throw new SyntaxError('The action "get" is given an illegal object: ' + typeof obj);
+    if (typeof path !== 'string')
+      throw new SyntaxError('The action "get" is given an illegal path: ' + typeof path);
+    for (let segment of path.split('.')) {
+      if (obj instanceof Headers || obj instanceof URLSearchParams)
+        obj = obj[segment] || obj.get(segment);
+      else
+        obj = obj[segment];
+    }
     return obj;
-  if (!(obj instanceof Object))
-    throw new SyntaxError('The action "get" is given an illegal object: ' + typeof obj);
-  if (typeof path !== 'string')
-    throw new SyntaxError('The action "get" is given an illegal path: ' + typeof path);
-  for (let segment of path.split('.')) {
-    if (obj instanceof Headers || obj instanceof URLSearchParams)
-      obj = obj[segment] || obj.get(segment);
-    else
-      obj = obj[segment];
+  },
+  equals: function equals(...args) {   //todo untested
+    if (args.length === 1 ? !!args[0] : args[0] === args[1])
+      return args[0];
+    throw 'else';
   }
-  return obj;
 }
