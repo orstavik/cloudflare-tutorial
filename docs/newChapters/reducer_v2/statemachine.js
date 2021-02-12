@@ -31,23 +31,32 @@ function firstReadyAction(frame) {
   return {};
 }
 
-function trace(frame, txt){
-  frame.trace += txt;
+function trace(frame, id, txt) {
+  const previous = frame.trace[frame.trace.length - 1];
+  if (previous && previous[0] === id)
+    previous[1] += txt;
+  else
+    frame.trace.push([id, txt]);
+  //todo this function always run at trace points. We can then add functions here that will be alerted when certain trace conditions occurs
+  // if(txt.matches(oneOfTheFilters))
+  //   console.log(frame);
 }
 
-function asyncActionReturns(frame, callTxt, key, val) {
+function asyncActionReturns(frame, id, callTxt, key, val) {
   if (key in frame.state)
-    return trace(frame, callTxt + 'b');
-  setValue(frame, callTxt, key, val);
+    return trace(frame, id, callTxt + 'b');
+  setValue(frame, id, callTxt, key, val);
   run(frame);
 }
 
-function setValue(frame, callTxt, key, val) {
-  trace(frame, callTxt);
+function setValue(frame, id, callTxt, key, val) {
   frame.state[key] = val;
+  key === 'response' && (callTxt += 'r');
+  key.startsWith('_observer') && !frame.remainingActions.filter(([i, p, f, out]) => out.startsWith('_observer')).length && (callTxt += 'l');
+  trace(frame, id, callTxt);
   frame.remainingActions = frame.remainingActions.filter(([id, params, _, output]) => {
     if (output === key || params.find(({op, key: p}) => op === '&&' && p === key)) {
-      trace(frame, `:${id}_c`);
+      trace(frame, id, `c`);
       return false;
     }
     return true;
@@ -62,17 +71,17 @@ function setValue(frame, callTxt, key, val) {
 export function run(frame) {
   for (let {action, args} = firstReadyAction(frame); action; {action, args} = firstReadyAction(frame)) {
     const [id, params, fun, output, error] = action;
-    trace(frame, `:${id}_i`); //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
+    trace(frame, id, `i`); //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
     frame.preInvoke && frame.preInvoke.forEach(fun => fun(frame));
     const result = runFun(fun, args);
     if (result.success instanceof Promise) {
-      trace(frame, 'a');
-      result.success.then(val => asyncActionReturns(frame, `:${id}_o`, output, val));
-      result.error.then(val => asyncActionReturns(frame, `:${id}_e`, error, val));
+      trace(frame, id, 'a');
+      result.success.then(val => asyncActionReturns(frame, id, `o`, output, val));
+      result.error.then(val => asyncActionReturns(frame, id, `e`, error, val));
     } else if ('success' in result) {
-      setValue(frame, 'o', output, result.success);
+      setValue(frame, id, 'o', output, result.success);
     } else /*if ('error' in result)*/ {
-      setValue(frame, 'e', error, result.error);
+      setValue(frame, id, 'e', error, result.error);
     }
   }
 }

@@ -9,13 +9,13 @@
     window.parent.postMessage(msg, '*');
   }
 
-  function frameToString({actions, functions, state: context, trace: sequence}) {
+  function frameToString({actions, functions, state: context, trace}) {
+    trace = trace.map(idTxt=>':'+idTxt.join('_')).join('');
     actions = actions.map(([id, params, fun, output, error]) => [params.map(p => p instanceof Object ? p.op + p.key : typeof (p) === 'string' ? JSON.stringify(p) : p), fun.name, output, error]);
     const state = {};
     for (let key in context)
       state[key] = context[key] === undefined ? null : context[key];
-    return btoa(JSON.stringify({actions, functions, trace: sequence, state: state}));
-    //todo ugly hack to put the functions back into the stack trace.
+    return btoa(JSON.stringify({actions, functions, trace, state}));
   }
 
   let previous;
@@ -33,11 +33,13 @@
       res[key] = JSON.stringify(frame.state[key]);
       previous[key] !== res[key] && (diff.push([key, previous[key], res[key]]));
     }
-    previous = res;                      //todo rename sequence to trace
-    if (diff.length > 1) {               //todo this is untested!! todo don't exactly know how to update the sequence here..
+    previous = res;
+    //a mutation is marked as an unknown action: `:_Mi`. Analysis must be done to highlight potential sinners.. If there are more than one async function and one of the async functions return, then the culprit action might be one of the async actions running.
+    // todo untested
+    if (diff.length > 1) {
       const i = Object.keys(frame.state._mutations).length;
       frame.state._mutations[i] = diff;
-      frame.sequence += '_M' + i;
+      frame.sequence += ':_M' + i;
     }
     return diff;
   }

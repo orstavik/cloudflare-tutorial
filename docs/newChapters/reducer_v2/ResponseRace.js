@@ -37,7 +37,7 @@ function findActionThatCanOutputResponse(actions) {
 //The stateMachine a) starts the inner statemachine and b) monitors the state of the response and observers.
 export function stateMachine(actions, state, cbs) {
   const postFrame = cbs.slice();
-  const frame = {actions, remainingActions: actions.slice(), state, trace: '', cbs, postFrame};
+  const frame = {actions, remainingActions: actions.slice(), state, trace: [], cbs, postFrame};
   run(frame);
 
   //setting up response and observer callbacks
