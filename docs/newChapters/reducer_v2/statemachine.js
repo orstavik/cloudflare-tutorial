@@ -37,10 +37,7 @@ function trace(frame, id, txt) {
     previous[1] += txt;
   else
     frame.trace.push([id, txt]);
-  for (let [key, tracers] of Object.entries(frame.tracers)) {
-    if(txt.indexOf(key) >= 0 && tracers instanceof Array)        //todo this is very inefficient currently. Bad format for writing the query.
-      tracers.forEach(fun=>fun(frame));
-  }
+  frame.onTrace(frame, txt);
 }
 
 function asyncActionReturns(frame, id, callTxt, key, val) {

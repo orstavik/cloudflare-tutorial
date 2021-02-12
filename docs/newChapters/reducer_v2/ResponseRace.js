@@ -38,7 +38,14 @@ function findActionThatCanOutputResponse(actions) {
 export function stateMachine(actions, state, cbs) {
   // const postFrame = cbs.slice();
   const tracers = {'i': cbs, 'e': cbs, 'o': cbs};
-  const frame = {actions, remainingActions: actions.slice(), state, trace: []/*, cbs, postFrame*/, tracers};
+  const onTrace = function (frame, txt) {
+    for (let [key, tras] of Object.entries(tracers)) {
+      if (txt.indexOf(key) >= 0 && tras instanceof Array)        //todo this is very inefficient currently. Bad format for writing the query.
+        tras.forEach(fun => fun(frame));
+    }
+  }
+
+  const frame = {actions, remainingActions: actions.slice(), state, trace: []/*, cbs, postFrame*/, onTrace};
   run(frame);
 
   //setting up response and observer callbacks
