@@ -356,4 +356,11 @@ a1. the very first call sequence marks the start of a frame.
 a2. Then, every call sequence that doesn't include 'i', but do include 'e' or 'o' marks the start of a frame.
 this is useful as it illustrate a time when the statemachine has been left in an incomplete state.
 These pauses are relevant because here we can both see which functions we are waiting for, and what state the system is in, while we await.
+
+//todo Loose end analysis. "Loose ends" are states that are defined by the user, but not used as input anywhere.
+// 'response' and _observer_s are such states, that will be run.
+// There should be a rule that says that loose ends will be cleaned up and removed whenever possible.
+// If you want to have a state that is to be left as a loose end, we need to give this a prefix.
+// frame.postFrame && frame.postFrame.forEach(fun => fun(frame));
+
 </pre>

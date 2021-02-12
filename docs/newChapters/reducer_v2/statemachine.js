@@ -32,12 +32,8 @@ function firstReadyAction(frame) {
 }
 
 function trace(frame, id, txt) {
-  const previous = frame.trace[frame.trace.length - 1];
-  if (previous && previous[0] === id)
-    previous[1] += txt;
-  else
-    frame.trace.push([id, txt]);
-  frame.onTrace(frame, txt);
+  frame.trace.push([id, txt]);
+  frame.onTrace && frame.onTrace(frame, txt);
 }
 
 function asyncActionReturns(frame, id, callTxt, key, val) {
@@ -49,8 +45,10 @@ function asyncActionReturns(frame, id, callTxt, key, val) {
 
 function setValue(frame, id, callTxt, key, val) {
   frame.state[key] = val;
+  //custom trace code for ResponseRace machine
   key === 'response' && (callTxt += 'r');
   key.startsWith('_observer') && !frame.remainingActions.filter(([i, p, f, out]) => out.startsWith('_observer')).length && (callTxt += 'l');
+  //custom trace code for ResponseRace machine ends
   trace(frame, id, callTxt);
   frame.remainingActions = frame.remainingActions.filter(([id, params, _, output]) => {
     if (output === key || params.find(({op, key: p}) => op === '&&' && p === key)) {
@@ -59,18 +57,12 @@ function setValue(frame, id, callTxt, key, val) {
     }
     return true;
   });
-  //todo Loose end analysis. "Loose ends" are states that are defined by the user, but not used as input anywhere.
-  // 'response' and _observer_s are such states, that will be run.
-  // There should be a rule that says that loose ends will be cleaned up and removed whenever possible.
-  // If you want to have a state that is to be left as a loose end, we need to give this a prefix.
-  // frame.postFrame && frame.postFrame.forEach(fun => fun(frame));
 }
 
 export function run(frame) {
   for (let {action, args} = firstReadyAction(frame); action; {action, args} = firstReadyAction(frame)) {
     const [id, params, fun, output, error] = action;
-    trace(frame, id, `i`); //adding invoked. This is just a temporary placeholder, in case the runFun crashes.. so we get a debug out.
-    // frame.preInvoke && frame.preInvoke.forEach(fun => fun(frame));
+    trace(frame, id, `i`);             //we need to trace before invokation as the function might trigger an endless loop.
     const result = runFun(fun, args);
     if (result.success instanceof Promise) {
       trace(frame, id, 'a');

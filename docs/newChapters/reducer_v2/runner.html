@@ -9,8 +9,22 @@
     window.parent.postMessage(msg, '*');
   }
 
+  function minimizeTraceList(trace) {
+    let prev;
+    let res = [];
+    for (let t of trace) {
+      if (prev && prev[0] === t[0])
+        prev[1] += t[1];
+      else
+        res.push(prev = [...t]);
+    }
+    return res;
+  }
+
   function frameToString({actions, functions, state: context, trace}) {
-    trace = trace.map(idTxt=>':'+idTxt.join('_')).join('');
+    trace = minimizeTraceList(trace);
+
+    trace = trace.map(idTxt => ':' + idTxt.join('_')).join('');
     actions = actions.map(([id, params, fun, output, error]) => [params.map(p => p instanceof Object ? p.op + p.key : typeof (p) === 'string' ? JSON.stringify(p) : p), fun.name, output, error]);
     const state = {};
     for (let key in context)
