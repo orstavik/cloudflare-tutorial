@@ -22,9 +22,7 @@ const actions = [
   function hashToText() {
     const data = location.hash.substr(1);
     const obj = JSON.parse(atob(data));
-    const {actions, functions, state, trace} = obj;
-    window.state = state || {};
-    window.trace = trace|| '';
+    const {actions, functions} = obj;
     pre.value = editorText(actions, functions);
   }
 
@@ -43,7 +41,7 @@ const actions = [
 
   function textToMessage(){
     const {functions, actions} = getCodeFromEditor(pre.value);
-    const hash = JSON.stringify({actions, functions, state, trace});
+    const hash = btoa(JSON.stringify({actions, functions}));
     window.parent.postMessage(hash, '*');
   }
 

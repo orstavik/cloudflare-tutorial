@@ -6,20 +6,20 @@
   function hashToText() {
     const data = location.hash.substr(1);
     const obj = JSON.parse(atob(data));
-    const {actions, functions, state, trace} = obj;
-    window.actions = actions || [];
-    window.functions = functions || {};
-    window.trace = trace || '';
+    const {state} = obj;
     pre.value = JSON.stringify(state || {}, null, 2);
   }
 
   addEventListener("hashchange", hashToText);
   hashToText();
 
-  function textToMessage(){
-    const state = JSON.parse(pre.value);
-    const hash = JSON.stringify({actions, functions, state, trace});
-    window.parent.postMessage(hash, '*');
+  function textToMessage() {
+    try {
+      const txt = JSON.stringify({state: JSON.parse(pre.value)});
+      window.parent.postMessage(btoa(txt), '*');
+    } catch(err){
+      console.error(err);
+    }
   }
 
   window.addEventListener("change", textToMessage);

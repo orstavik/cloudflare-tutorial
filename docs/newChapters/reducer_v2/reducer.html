@@ -53,10 +53,10 @@
       const obj = JSON.parse(atob(data));
       console.log(obj);
       const {actions, functions, trace, state} = obj;
-      window.actions = actions;
-      window.functions = functions;
-      window.trace = trace;
-      window.state = state;
+      window.actions = actions || window.actions;
+      window.functions = functions || window.functions;
+      window.trace = trace || window.trace;
+      window.state = state || window.trace;
 
       document.querySelector("#debug").checked = !!state?.env?._debug;
       document.querySelector("#mutations").checked = !!state?.env?._mutationCheck;
