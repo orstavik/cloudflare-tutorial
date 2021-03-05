@@ -1,0 +1,19 @@
+<script>
+
+  function freezeOutput(fun) {
+    function deepFreeze(object) {
+      for (const name of Object.getOwnPropertyNames(object)) {
+        const value = object[name];
+        if (value && typeof value === "object")
+          deepFreeze(value);
+      }
+      return Object.freeze(object);
+    }
+
+    return function (...args) {
+      const res = fun(...args);
+      return res instanceof Promise ? res.then(res => deepFreeze(res)) : deepFreeze(res);
+    }
+  }
+
+</script>
