@@ -1,0 +1,72 @@
+<script>
+
+  function memoize(func) {
+    const cache = {};
+    const memoized = function (...args) {
+      const key = JSON.stringify(args);
+      if (cache[key]) return cache[key];
+      return cache[key] = func(...args);
+    }
+    memoized.name = '_memo_' + func.name;
+    return memoized;
+  }
+
+  function asyncMemoize(func) {
+    const cache = {};
+    const memoized = async function (...args) {
+      const key = JSON.stringify(args);
+      if (cache[key]) return cache[key];
+      const res = await func(...args);
+      return cache[key] = res;
+    }
+    memoized.name = '_asyncMemo_' + func.name;
+    return memoized;
+  }
+
+  //this function handles both async and sync. It will essentially only
+  function superMemoize(func) {
+    const cache = {};
+    const memoized = function (...args) {
+      const key = JSON.stringify(args);
+      if (cache[key])
+        return cache[key];
+      const res = func(...args);
+      if (!(res instanceof Promise))
+        return cache[key] = res;
+      let resolve, reject;
+      const res2 = new Promise((r, e) => (resolve = r, reject = e));
+      cache[key] = res2;
+      res.then(data => (cache[key] = data, resolve(data)));
+      res.catch(data => (delete cache[key], reject(data)));
+      return res2;
+    }
+    memoized.name = '_memo_' + func.name;
+    return memoized;
+  }
+
+  function sum(x, y) {
+    return x + y;
+  }
+
+  async function delayedSum(a, b) {
+    await new Promise(r => setTimeout(r, 10));
+    return a + b;
+  }
+
+  const superMemoSum = superMemoize(delayedSum);
+
+  (async function () {
+    const one = superMemoSum(2, 2);  //
+    const two = superMemoSum(2, 2);  //returns the same promise as one
+    const oneValue = await one;
+    const twoValue = await two;     //both are now four
+    await new Promise(r => setTimeout(r, 100));
+    const three = superMemoSum(2, 2); //returns four immediately, no need for await.
+  })();
+
+
+  const memoSum = memoize(sum);
+
+  const four = memoSum(22, 22);
+  const sameFour = memoSum(22, 22);
+</script>
