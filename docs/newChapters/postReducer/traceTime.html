@@ -1,0 +1,79 @@
+<script>
+
+
+  //Function that observes when a list of functions are *first* invoked.
+  function traceInvokeTime(...funs) {
+    let resolver;
+    const allAreInvoked = new Promise(r => resolver = r);
+    const invoked = [];
+    return [allAreInvoked, ...funs.map((fun, i) => {
+      return function (...args) {
+        invoked[i] = true;
+        if (invoked.length === funs.length && invoked.every(a => a))
+          resolver(true);
+        return fun(...args);
+      }
+    })];
+  }
+
+  //observe the output of a series of functions.
+  //the function returned as the first listed arguments will check if there are any lingering calls from one of these
+  //functions, and then return a promise to check.
+
+  function traceNoLingering(...funs) {
+    const lingers = [];
+    const newFuns = funs.map(fun => {   //todo is it necessary to call lingers.slice() here? test it
+      return function (...args) {
+        const res = fun(...args);
+        if (res instanceof Promise)
+          lingers.push(res);
+        return res;
+      }
+    });
+    return [() => Promise.allSettled(lingers), ...newFuns];
+  }
+
+  (async function () {
+    async function a() {
+      await new Promise(r => setTimeout(r, 20));
+      return 'a';
+    }
+
+    async function b() {
+      await new Promise(r => setTimeout(r, 40));
+      return 'b';
+    }
+
+    async function c() {
+      await new Promise(r => setTimeout(r, 80));
+      return 'c';
+    }
+
+    const [whenReady, a2, b2, c2] = traceNoLingering(a, b, c);
+
+    const A = a2();
+    const B = b2();
+    const ABready = whenReady();
+    const C = c2();
+    const ABCready = whenReady();
+    console.log(A, B, C, ABready, ABCready);
+    await A;
+    console.log(A, B, C, ABready, ABCready);
+    await ABready;
+    console.log(A, B, C, ABready, ABCready);
+    await ABCready;
+    console.log(A, B, C, ABready, ABCready);
+  })();
+
+  function traceInvokedAndNoLingering(...funs) {
+    const [allInvoked, ...funs2] = traceInvokeTime(...funs);
+    const [noLingering, ...funs3] = traceNoLingering(...funs2);
+    return [(async function () {
+      await allInvoked;
+      await noLingering;
+    })(), ...funs3];
+  }
+
+  //todo how to make the no lingering recursive? 
+
+</script>
