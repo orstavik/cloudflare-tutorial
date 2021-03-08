@@ -47,9 +47,9 @@ function makeObject(key, value){
 
 const makeFrozenObject = freezeOutput(makeObject);
 
-const frozenAsAPopsickle = makeFrozenObject('hello', 'sunshine');
-frozenAsAPopsickle.hello = 'rain';
-console.log(frozenAsAPopsickle.hello); // => sunshine
+const frozenAsAPopsicle = makeFrozenObject('hello', 'sunshine');
+frozenAsAPopsicle.hello = 'rain';
+console.log(frozenAsAPopsicle.hello); // => sunshine
 ```
 
 ## References
