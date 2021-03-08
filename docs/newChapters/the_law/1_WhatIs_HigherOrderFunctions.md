@@ -52,7 +52,7 @@ This chapter concerns **regulator** higher-order functions. At their core, regul
 Below is a simple JS sketch of the concept. 
 
 ```javascript
-function regulatingFunction(original) {
+function regulatorFunction(original) {
   return function regulated(...args) {
     //regulate input
     const originalResult = original(...args);
@@ -61,11 +61,11 @@ function regulatingFunction(original) {
   }
 }
 
-const myRegulatorFunction = regulatingFunction(myOriginalFunction);
+const myRegulatorFunction = regulatorFunction(myOriginalFunction);
 const x = myRegulatorFunction(1, 2, 3);
 ```
 
-Note: regulating hofs can also:
+Note: regulator hofs can also:
  * produce *additional* output values/functions and
  * produce a *list of* output functions from an equivalent list of input functions.
 
@@ -73,7 +73,7 @@ However, once the concept becomes clear, these added abilities will make more se
 
 ## WhatIs: regulate (i)? observe
 
-The first thing a regulating function does is simply to **observe** the input and output of an original function.
+The first thing a regulator function does is simply to **observe** the input and output of an original function.
 
 ```javascript
 function regulator(original) {
