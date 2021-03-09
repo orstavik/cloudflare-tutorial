@@ -137,7 +137,35 @@ function asyncMemoize(original) {
 }
 ```
 
-## Test: asyncMemoize
+## HowTo: memoizeLRU?
+
+LRU is short for Least Recently Used. It is a simple mechanism to avoid saving everything forever, and using too much memory. In fact, if you intend for your application to run for a little while, and expect a function to be called with different arguments, then you must use an LRU strategy.
+
+```javascript
+function memoizeLRU(size, fun){
+  const cache = {};
+  const fun2 = function(...args){
+    const key = JSON.stringify(args);
+    if(key in cache){
+      const value = cache[key];
+      delete cache[key];
+      return cache[key] = value;
+    }
+    const keys = Object.keys(cache);
+    keys.length >= size && delete cache[keys[0]];
+    const res = original(...args);
+    if (res instanceof Promise) {
+      res.then(res2 => cache[key] === res && (cache[key] = res2));
+      res.catch(err => cache[key] === res && (delete cache[key]));
+    }
+    return cache[key] = res;
+  }
+  Object.defineProperty(fun, 'name', {value: '_mem_'+fun.name});
+  return fun2;
+}
+```
+
+## Test: asyncMemoize   //todo add test for lru
 
 ```javascript
 function asyncMemoize(original) {
@@ -177,6 +205,7 @@ const efficientMakeObject = asyncMemoize(makeObject);
   console.log(d2, d2 === a2);     //we even get the cached object immediately, if we want to skip await
 })();
 ```
+
 
 ## References
 

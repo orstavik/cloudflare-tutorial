@@ -11,13 +11,11 @@ The basic mutation check looks like this:
 ```javascript
 function mutationCheck(original) {
   return function mutationChecked(...args) {
-    const before = args.map(a => JSON.stringify(a));
+    const before = JSON.stringify(args);
     const res = original(...args);
-    const after = args.map(a => JSON.stringify(a));
-    for (let i = 0; i < args.length; i++) {
-      if (before[i] !== after[i])
-        console.warn(`Hello mutant: ${original.name},arg nr ${i}, before value, after value: `, JSON.parse(before[i]), JSON.parse(after[i]));
-    }
+    const after = JSON.stringify(args);
+    if (before !== after)
+      console.warn("Hello mutant!", original.name, "before:", before, "after:", after);
     return res;
   }
 }
@@ -29,50 +27,52 @@ This mutation check works splendidly, with a couple of caveats:
 2. the input arguments are JSONable, and
 3. the function doesn't do any JSON-invisible mutations such as converting `undefined` to `null`, or vice versa, or `delete` entries in an `Array` or properties in an `Object`, or similar.
 
-If you need a custom comparator other than JSON, then no pattern can help you. You are on your own, you must write a custom function to create a signature of the objects/values you need to verify do not change.
+If you need a custom comparator other than JSON, then no pattern can help you. You are on your own. You must write a custom function to create a signature of the objects/values you need to verify do not change.
 
 ## Step2: check async mutations
 
-If you need to discover changes in async functions, we have got your back. Mutation checks only get interesting when we mix in async functions. Some of the most likely candidates for inspection are async.
+Mutation checks get reeeeally interesting when we mix in async functions. And. Async mutation detection is not as simple as one might hope:
 
-Async functions might run in parallel, and they might access the same input arguments. To monitor such a situation, we need a CrowdControl mutation checker:
+1. Async functions might run in parallel, and they might access the same input arguments. Thus, even though you discover a mutation, you will not be able to pinpoint exactly where the mutation occurred. Never. Not while JS is JS. All you can detect programmatically are some likely candidates which *might* perform the mutation.
+2. An async mutation checker is therefore best suited to run a full check of all async functions at all times. This is the best means to pinpoint when and where.
+
+To monitor such a situation, we need a CrowdControl mutation checker. We can use this CrowdControl checker to give us more accesspoints at the beginning and end of as many functions as possible/relevant, to give us as much information as possible when chasing the mutation bug.
 
 ```javascript
-function compareBeforeAfter(before, after) {
-  const res = [];
-  for (let i = 0; i < before.length; i++) {
-    const b = before[i];
-    const a = after[i];
-    if (b !== a) res[i] = [b, a];
+function checkAsyncArguments(argsToAsyncActive, msg) {
+  const mutants = argsToAsyncActive.filter(({before, args}) => before !== JSON.stringify(args));
+  if (!mutants.length)
+    return;
+  console.warn(`Async mutation detected ${msg}:`);
+  for (let entry of mutants) {
+    const {args, before, original} = entry;
+    var now = JSON.stringify(args);
+    console.warn(`arguments of ${original.name}() has changed:`);
+    console.log('before', before);
+    console.log('now', now);
+    entry.before = now; //I know. How could I. I truly am a dishonest. ;)
   }
-  return res;
-}
-
-function mutantCheck(fun, before, args) {
-  const after = args.map(a => JSON.stringify(a));
-  const diff = compareBeforeAfter(before, after);
-  if (diff.length)
-    console.log('mutant detected. main suspect is: ', fun.name, diff);
-  return diff;
 }
 
 function mutantCrowdController(...originals) {
-  const activeFunctions = new Map();
+  const asyncs = [];
   return originals.map(original => {
     return function mutationChecked(...args) {
-      const before = args.map(a => JSON.stringify(a));
+      checkAsyncArguments(asyncs, `before an invocation of ${original.name}()`);
+      const before = JSON.stringify(args);
       const res = original(...args);
       if (!(res instanceof Promise)) {
-        mutantCheck(original, before, args);
+        const after = JSON.stringify(args);
+        if (before !== after) {
+          console.warn('sync mutation: ', original.name, before, after);
+          checkAsyncArguments(asyncs, `after an invocation of ${original.name}()`);
+        }
       } else {
-        activeFunctions.set(res, original);
+        const checkEntry = {args, before, original};
+        asyncs.push(checkEntry);
         res.finally(output => {
-          activeFunctions.delete(res);
-          const diff = mutantCheck(original, before, args);
-          if (diff.length) {
-            for (let otherFun of activeFunctions.values())
-              console.log('additional mutant suspect: ', otherFun.name);
-          }
+          checkAsyncArguments(asyncs, `when an async ${original.name}() resolved`);
+          asyncs.splice(asyncs.indexOf(checkEntry), 1);//Again! I know. Lazy bum..
         });
       }
       return res;
@@ -82,28 +82,24 @@ function mutantCrowdController(...originals) {
 
 async function a(obj) {
   await new Promise(r => setTimeout(r, 50));
-  obj.bob = 'alice';
+  obj.a = null;
 }
 
 async function b(obj) {
   await new Promise(r => setTimeout(r, 30));
-  obj.alice = 'bob';
+  obj.b = null;
 }
 
 const [A, B] = mutantCrowdController(a, b);
 
 (async function () {
-  const test = {alice: 'hello', bob: 'sunshine'};
+  const test = {a: 'hello', b: 'sunshine'};
   A(test);  //this prints two candidates
   B(test);  //this prints one candidate
-
-//todo this is not good enough.
-//the mutations need to be registered in clusters.
-//we need to check to see which functions are active at the same time.
-//the second output should also list to potential candidates. it only lists one.
-
 })();
 ```
+
+Detecting mutations is hard core. It is not for sissies. You have been warned. You have been challenged. 
 
 ## References
 
