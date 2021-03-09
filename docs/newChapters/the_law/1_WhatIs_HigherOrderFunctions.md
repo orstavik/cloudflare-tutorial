@@ -12,6 +12,8 @@ Native Javascript use hofs in many different places:
 * `requestAnimationFrame(..)`,
 * `Array.prototype.map(..)`,
 * `Array.prototype.filter(..)`,
+* `Array.prototype.sort(..)`,
+* `Array.prototype.find(..)`,
 
 What is common with the native Javascript hofs is:
 
@@ -112,4 +114,5 @@ When the regulator *changes* the output/input from/to original function, this co
 
 ## References
 
- * 
+ * [Understanding Higher-Order Functions in JavaScript](https://blog.bitsrc.io/understanding-higher-order-functions-in-javascript-75461803bad)
+ * [Eloquent JavaScript: Higher-Order Functions](https://eloquentjavascript.net/05_higher_order.html)
