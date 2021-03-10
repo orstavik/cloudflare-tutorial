@@ -2,9 +2,9 @@
 
 A higher-order function (hof) is a function that either takes a function as an argument and/or returns a function as its result.
 
-## 1. Iterative higher-order functions (function in, data out)
+## WhatIs: FIDO?
 
-Native Javascript use hofs in many different places:
+FIDO stands for Function In Data Out. They are the simplest and most commonly used higher-order functions around. Javascript use FIDOs "everywhere":
 
 * `addEventListener(..)`,
 * `setTimeout(..)`,
@@ -15,46 +15,58 @@ Native Javascript use hofs in many different places:
 * `Array.prototype.sort(..)`,
 * `Array.prototype.find(..)`,
 
-What is common with the native Javascript hofs is:
+All FIDOs:
 
-1. They ***ITERATE*** over a set of data:
-	* The `addEventListener(..)` function iterates over all future instances of the observed event;
-	* the `setTimeout(..)` function iterates over the coming time interval, and stops after the first; and
-	* the `map(..)` iterates over the entries in the `Array`.
+1. ***ITERATE*** over a set of data. For example:
+	* `Array.prototype.map(..)` iterates over the entries in the `Array`, 
+	* `Array.prototype.findIndex(..)` iterates over the entries in the `Array` *until it finds a matching element*, 
+	* `setInterval(..., ms)` iterates of a series of points in time, and
+	* `addEventListener(..)` iterates over all future instances of the observed event.
+	  
+   What might not be so easily recognized is that `setTimeout()` and `requestAnimationFrame()` also *iterate*: they iterate over future points in time **but only upto and including the first point**. It might seem strange to call this a form of iteration. But it is. And, when you fashion FIDOs you need this perspective both to first) see the potential stream of events/data points that *might* be iterated, and second) to better adapt your FIDO to use cases against that stream. 
 
-2. We pass them ***ONE INPUT FUNCTION***. The *input function* is what makes them "higher-order". The input function is used in *each step of the above describing interation*.
+2. apply their **input function at each point in the iteration**. Now, in theory, you *can* make a FIDO applies no function during each point of the iteration. You can also make an infinite loop. And dedicate your life to growing the universe's biggest tomato on the surface of Mercury. But. In practice, this is not likely to bear much fruit. Caveat: I have never been to Mercury.  
 
-3. They are associated with an ***ORIGIN OBJECT***: The `.map(..)` is a method on an `Array`; the `addEventListener(..)` is a method on a `DOMNode`; the `setTimeout(..)` is associated with the `window`. The native hofs can also be given other values as data (`ms` in `setTimeout` or `type` for `addEventListener(..)`, but this is not critical).
+3. operate against a **stateful context**: the `.map(..)` works against an `Array`; the `addEventListener(..)` works against a `DOMNode` instance and a stream of events; the `setTimeout(..)` is associated with a `window` instance and its time.
 
-4. They ***RETURN a VALUE*** or a data object: `addEventListener(..)` return `undefined`; `Array.prototype.filter(..)` return another array; and `setTimeout(..)` return an integer. What is particularly important to note here is that they by design do ***NOT*** return a function(!). Yes, you *can* make functions such as `Array.reduce(..)` return a `function`, but that is at best an edge case used one in a thousand.
+4. **RETURN VALUES**, as in DataOut. This is obvious in the case of for example `Array.prototype.filter(..)` return another array. But this is also true for `addEventListener(..)` that return `undefined` and `setTimeout(..)` that return an number.
+    
+    Now, a FIDO *can* return `Function` objects. For example, you might filter an array to include only `Function` objects. But. When a FIDO does so, it doesn't *create* these functions, it only treats them as some kind of data point. Again, you might envisage a tomato growing on Mercury, but again, I'm not sure that is fruitful nor practical.
 
-One could have made some of the native Javascript hofs return a function. For example, Javascript could easily have made `setTimeout(..)` return a specific `clearTimeout()` function, instead of a specific integer that is passed to a generic `clearTimeout()` function. However, the choice was made to keep the output a value, likely because it would be simpler to conceptually grasp and more efficient for memory and computation.
+> By keeping their output as values, FIDOs remain simpler. This is why you see this pattern in many of the native Javascript FIDOs. This is not because the alternatives are impossible to imagine: for example, `setTimeout(..)` could have returned a specific `clearTimeout()` function instance, that could be used to cancel the iteration inside the `setTimeout()` instance. But. When FIDOs return pure values, systems become conceptually simpler and FIDO pairs such as `setTimeout()` and `clearTimeout()` are conceptually easy to grasp. 
 
-## 2. Machine Learning higher-order functions (data in, function out)
+## WhatIs: DIFO? 
 
-In this article, we will not discuss machine learning hofs. Yet. A machine learning hof takes in pure values and data objects (non functions), and then produce a function. Machine learning function = values in, function out.
+A function that takes data as input and produce a function as output. Hm... Where have I heard about that again? ... Ah! Yes! Machine learning! You don't say?!? :)
 
-You feed a HO function with a set of data (training set). The HO function processes this input data to create a) tables, b) vectors, c) products, and even d) brand new algorithms which it fills a brand new, never-seen-before function that can then replicate, reuse, guess, simulate, contradict, or do anything else based on similar or completely different input. The sky is the limit.
+Machine learning is to create function machines that take Data In (a training set) and then creates/"trains" a function which can be used to tackle produce relevant/useful given some future input data.
 
-## 3. Regulator higher-order functions (function in, function out)
+There are many different ways in which a machine teacher DIFO could "train" a function based on input data. Most commonly, the machine trainer would process the DataInput into a set of tables, vectors, matrices, select algorithms and/or even create algorithms that in turn will produce an output value for a hitherto unknown input value.
+
+## WhatIs: FunFunFun? (sorry, the acronym FIFO was already taken)
 
 > To 'regulate' stems from the latin word 'regula' which means 'rule'.
 
-This chapter concerns **regulator** higher-order functions. At their core, regulator higher-order functions:
+A FunFunFun is:
+1. a higher-order function (fun 1), that
+1. take an input, **original** function (fun 2), and
+2. output a **regulator** function (fun 3).
 
-1. take an input function (called the **original** function),
+The **original** function is commonly an ordinary, first order, DataInDataOut (DIDO) function. Again, sure, you can regulate another higher-order function, but I will discuss that in the chapter about Mercurian tomatos.
 
-2. creates and returns a new wrapper function (called the **regulated** function) that:
-	1. takes a set of arguments,
-	2. regulate the arguments,
-	3. calls the original function with its arguments,
-	4. regulate the output from the original,
-	5. returns the regulated output as its own.
+The **regulator** function is the key in the FunFunFun. The **regulator**:
+1. takes a set of arguments,
+2. regulate the arguments,
+3. calls the original function with its (regulated) arguments,
+4. regulate the original output,
+5. returns the (regulated) output.
 
-Below is a simple JS sketch of the concept. 
+The **FunFunFun** often establish its own state which one or more regulators can use when they regulate the arguments, the output, and/or the invocation to the original function.
+
+Below is a funFunFun sketched in JS code. 
 
 ```javascript
-function regulatorFunction(original) {
+function funFunFun(original) {
   return function regulated(...args) {
     //regulate input
     const originalResult = original(...args);
@@ -67,11 +79,9 @@ const myRegulatorFunction = regulatorFunction(myOriginalFunction);
 const x = myRegulatorFunction(1, 2, 3);
 ```
 
-Note: regulator hofs can also:
- * produce *additional* output values/functions and
- * produce a *list of* output functions from an equivalent list of input functions.
-
-However, once the concept becomes clear, these added abilities will make more sense.
+**Note:** As will become clear in the coming tutorails, FunFunFuns:
+1. often produce *extra* outputs such as functions, promises, values *in addition to* the regulator function, and
+2. can just output a **list of regulator functions** from an equivalent **list of original, input functions**.
 
 ## WhatIs: regulate (i)? observe
 
@@ -101,16 +111,13 @@ The use case for simply **observing** the input and output of particular functio
  * machine learning,
  * and more. 
 
-However, the sharp eye can see that these use cases are not directed against the "normal user" of the application; they are directed at the developer/system manager. They are part of producing a meta-perspective from/on the app itself. 
+However, the sharp eye can see that these use cases are not directed against the "normal user", the eyeballs of the application; they are directed at the developer/system manager/analyzer. They are part of producing a meta-perspective from/on the app itself. 
 
 ## WhatIs: regulate (ii)? constrain input/output/function calls
 
-In theory, the output function can produce any output it desires. However, in practice, the output function *almost always* produce *the same or almost the same output* as the input function do.
+In theory, the regulator function can produce any output. In theory, we can also grow big tomatoes on Mercury. However, in practice, the regulator function *almost always* produce *the same* or a *highly correlated* output with the original function. The regulator is "a version of the original function" that "outputs a version of the output from the original version".
 
-When the regulator *changes* the output/input from/to original function, this commonly means to *slightly* modify/restrict the values in particular ways. For example, a regulator might:
-1. **restrict** `null` input arguments and turn all `null` input arguments into empty objects `{}` instead;
-2. **reuse** as much as possible of previous output values returned from the same function so as to save memory (at the expense of computing) or to enable dirty-checking for similar values.
-3. **memoize** (cache) output values for specific input arguments so as to avoid calling a function with the same arguments twice so as to reduce computing time (at the expense of memory).
+When the regulator *changes* the output/input from/to the original function, these *changes* are small and can be understood as either systematically restricting, duplicating, negating, or filtering the original output.
 
 ## References
 
