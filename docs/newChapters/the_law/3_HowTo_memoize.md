@@ -174,15 +174,45 @@ function memoizeLRU(fun, size = 100) {
 
 ## HowTo: memoizeLRU and support cloneable?
 
-Often, the function you wish to memoize returns an impure, but cloneable value: `fetch` returns a `Response` object, or you may have a heavy custom function that returns a DOM node. You cannot simply reuse the previous object in this instance, but you can reuse a `clone()` of that object. Here is the memoize function that also works for impure, but cloneable output.
+Often, the function you wish to memoize returns an impure, but cloneable value: `fetch` returns a `Response` object, or you may have a heavy custom function that returns a DOM node. You cannot simply reuse the previous object in this instance, but you can reuse a `clone()` of that object.
+
+If you know that you will only memoize `Response` objects for example, then you can do this:
 
 ```javascript
-function toCloneOrNot(output) {
-  return output instanceof Object && output.clone instanceof Function ? output.clone() :
-    output instanceof Object && output.cloneNode instanceof Function ? output.cloneNode(true) : output;
-}
-
 function memoizeLRU(fun, size = 100) {
+
+  const cache = {};
+  const fun2 = function (...args) {
+    const key = JSON.stringify(args);
+    if (key in cache) {
+      const value = cache[key];
+      delete cache[key];
+      cache[key] = value;
+      return value instanceof Promise ? value.then(res2 => res2.clone()) : value.clone();
+    }
+    const keys = Object.keys(cache);
+    keys.length >= size && delete cache[keys[0]];
+    const res = original(...args);
+    if (!(res instanceof Promise))
+      return cache[key] = res, res.clone();
+    cache[key] = res; //adding the promise for now.
+    res.catch(err => delete cache[key]);
+    return res.then(res2 => (cache[key] = res2, res2.clone()));
+  }
+  Object.defineProperty(fun, 'name', {value: '_mem_' + fun.name});
+  return fun2;
+}
+```
+
+Here is the memoize function that works for both pure outputs, `Reponse` objects, and DOM `Node`s.
+
+```javascript
+function memoizeLRU(fun, size = 100) {
+
+  function toCloneOrNot(output) {
+    return output instanceof Object && output.clone instanceof Function ? output.clone() :
+      output instanceof Object && output.cloneNode instanceof Function ? output.cloneNode(true) : output;
+  }
   const cache = {};
   const fun2 = function (...args) {
     const key = JSON.stringify(args);
