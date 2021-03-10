@@ -150,13 +150,13 @@ function asyncMemoize(original) {
 LRU is short for Least Recently Used. It is a simple mechanism to avoid saving everything forever, and using too much memory. In fact, if you intend for your application to run for a little while, and expect a function to be called with different arguments, then you must use an LRU strategy.
 
 ```javascript
-function memoizeLRU(fun, size = 100) {
+function memoizeLRU(original, size = 100) {
   const cache = {};
-  const fun2 = function (...args) {
+  const regulator = function (...args) {
     const key = JSON.stringify(args);
     if (key in cache) {
       const value = cache[key];
-      delete cache[key];
+      delete cache[key];//by deleting the key, we change the key order when we put it back in. LRU. Presto! 
       return cache[key] = value;
     }
     const keys = Object.keys(cache);
@@ -167,9 +167,13 @@ function memoizeLRU(fun, size = 100) {
     res.catch(err => delete cache[key]);
     return cache[key] = res.then(res2 => cache[key] = res2);
   }
-  Object.defineProperty(fun, 'name', {value: '_mem_' + fun.name});
-  return fun2;
+  Object.defineProperty(original, 'name', {value: '_mem_' + original.name});
+  return regulator;
 }
+
+const memoAbs = memoizeLRU(Math.abs); //
+const two = memoAbs(-2);
+const twotwo = memoAbs(-2);
 ```
 
 ## HowTo: memoizeLRU and support cloneable?
