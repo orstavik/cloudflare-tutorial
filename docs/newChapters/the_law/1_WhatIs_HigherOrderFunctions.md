@@ -116,3 +116,4 @@ When the regulator *changes* the output/input from/to original function, this co
 
  * [Understanding Higher-Order Functions in JavaScript](https://blog.bitsrc.io/understanding-higher-order-functions-in-javascript-75461803bad)
  * [Eloquent JavaScript: Higher-Order Functions](https://eloquentjavascript.net/05_higher_order.html)
+ * [What color is your function?](https://journal.stuffwithstuff.com/2015/02/01/what-color-is-your-function/)

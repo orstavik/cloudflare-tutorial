@@ -12,10 +12,12 @@ function deepFreeze(anything){
 }
 ```
 
+## HowTo: make a `freezer`?
+
 We can make a regulator function to create a regulated version of any input function like so:
 
 ```javascript
-function freezeOutput(fun){
+function freezer(fun){
   return function(...args){
     return deepFreeze(fun(...args));
   }
@@ -25,7 +27,7 @@ function freezeOutput(fun){
 ## Demo: deepFreezeRegulator
 
 ```javascript
-function freezeOutput(fun){
+function freezer(fun){
   function deepFreeze(anything){
     if(!(anything instanceof Object))
       return anything;
@@ -45,9 +47,9 @@ function makeObject(key, value){
   return res;
 }
 
-const makeFrozenObject = freezeOutput(makeObject);
+const makeAndFreezeObject = freezer(makeObject);
 
-const frozenAsAPopsicle = makeFrozenObject('hello', 'sunshine');
+const frozenAsAPopsicle = makeAndFreezeObject('hello', 'sunshine');
 frozenAsAPopsicle.hello = 'rain';
 console.log(frozenAsAPopsicle.hello); // => sunshine
 ```
