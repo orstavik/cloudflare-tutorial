@@ -1,6 +1,6 @@
 # HowTo: manage state?
 
-In this article we will describe how you can use regulators to manage state *as an afterthought*. It is truly wonderful.
+In this article we will describe how you can use regulators to manage state *as an afterthought*. It is wonderful.
 
 ```javascript
 function stateManager(...originals) {
@@ -17,11 +17,12 @@ function stateManager(...originals) {
           trace.push({id, name, type: 'sync', output});
           return output;
         }
-        const asyncStatus = {id, name, type: 'async', promise: output, pending: true};
+        const asyncStatus = {id, name, type: 'async', pending: output};
         trace.push(asyncStatus);
         output.then(output => trace.push({id, name, type: 'async', output}));
         output.catch(error => trace.push({id, name, type: 'async', error}));
-        output.finally(() => asyncStatus.pending = false);
+        output.finally(() => delete asyncStatus.pending); //att! mutation.
+        return output;
       } catch (error) {
         trace.push({id, type: 'sync', name, error});
         throw error;
@@ -31,15 +32,34 @@ function stateManager(...originals) {
     return regulator;
   });
 
-  function inspectState(obj) {
-
+  //return the trace. If an object is passed in, then any argument or output value matching a property will be renamed.
+  function inspectState(obj = {}) {
+    const reverseLookup = new Map(Object.entries(obj).map(([one, two]) => [two, one]));
+    return trace.map(({id, name, type, output, error, pending, promise}) => {
+      const res = {id, name, type};
+      output && (res.output = reverseLookup.get(output) || JSON.stringify(output));
+      pending && (res.pending = true);
+      error && (res.error = reverseLookup.get(error) || error.toString()); //todo how to log errors
+      return res;
+    });
   }
-  
-  function isFinished(recursive){
-    
+
+  //if recursive == true, then ready returns true only when no tasks remain pending.
+  //else, the ready await all pending tasks at the point queried returns
+  async function ready(recursive) {
+    let pendingTasks = trace.filter(({pending}) => pending);
+    await Promise.allSettled(pendingTasks);
+    pendingTasks = trace.filter(({pending}) => pending);
+    if (!recursive)
+      return !pendingTasks.length;
+    while (await pendingTasks) {
+      pendingTasks = trace.filter(({pending}) => pending);
+      if (!pendingTasks.length)
+        return true;
+    }
   }
 
-  return [inspectState, ...regulators];
+  return [inspectState, ready, ...regulators];
 }
 
 function sumImpl(a, b) {
