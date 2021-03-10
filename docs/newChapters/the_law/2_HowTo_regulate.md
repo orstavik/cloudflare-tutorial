@@ -80,7 +80,11 @@ function exaggerate(original) {
   const regulated = function(...args) {
     return original(...args) * factor;
   };
-  Object.defineProperty(regulated, 'name', {value: '_exaggerated_' + original.name});
+   //todo we should probably assign the regulator spec as a list on the function. and just use the original.name as the name.
+   // Object.defineProperty(regulator, 'name', {value: original.name});
+   // regulator.regulators = [stateManager, ...(original.regulators || [])];
+   // regulator.regulators = ['sm', ...(original.regulators || [])]; //this is not the best, i think just adding the function is better
+   Object.defineProperty(regulated, 'name', {value: '_exaggerated_' + original.name});
   return regulated;
 }
 Math.abs = exaggerate(Math.abs);
