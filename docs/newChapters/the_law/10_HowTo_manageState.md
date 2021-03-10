@@ -2,6 +2,8 @@
 
 In this article we will describe how you can use regulators to manage state *as an afterthought*. It is wonderful.
 
+## Regulator: `stateManager(...originals)`
+
 ```javascript
 function stateManager(...originals) {
   const trace = [];
@@ -37,8 +39,10 @@ function stateManager(...originals) {
     const reverseLookup = new Map(Object.entries(obj).map(([one, two]) => [two, one]));
     return trace.map(({id, name, type, output, error, pending, promise}) => {
       const res = {id, name, type};
-      output && (res.output = reverseLookup.get(output) || JSON.stringify(output));
       pending && (res.pending = true);
+      type && (res.type = type);
+      args && (res.args = args.map(arg => reverseLookup.get(arg) || JSON.stringify(arg)));
+      output && (res.output = reverseLookup.get(output) || JSON.stringify(output));
       error && (res.error = reverseLookup.get(error) || error.toString()); //todo how to log errors
       return res;
     });
@@ -62,21 +66,22 @@ function stateManager(...originals) {
   return [inspectState, ready, ...regulators];
 }
 
-function sumImpl(a, b) {
-  return a + b;
-}
+Math.sum = (a, b) => a + b;
 
-const [callSequence, sum, pow, sqrt] = listInvocations(sumImpl, Math.pow, Math.sqrt);
+
+const [inspectState, ready, sum, pow, sqrt] = listInvocations(Math.sum, Math.pow, Math.sqrt);
 
 function hypotenuse(a, b) {
   return sqrt(sum(pow(a, 2), pow(b, 2)));
 }
 
-console.log(hypotenuse(3, 4)); // 5
-console.log(callSequence);    // ["pow", "pow", "sumImpl", "sqrt"]
+const state = {a: 3, b: 4};
+state.c = hypotenuse(3, state.b);
+console.log(inspectState(state));    // ["pow", "pow", "sumImpl", "sqrt"]
+console.log(ready());
 ```
 
-Simple solutions built with this pattern can replace both state management solutions such as Redux and development tools such as unit testing. It is truly powerful stuff.
+Simple solutions built with this pattern can replace both state management solutions such as Redux and development tools such as unit testing.
 
 ## References
 
