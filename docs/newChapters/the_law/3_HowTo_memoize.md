@@ -329,6 +329,26 @@ const efficientMakeObject = asyncMemoize(makeObject);
 
 Att! Often, the heavy functions return objects that must be `clone()` before use.
 
+## HowTo: `memoize(fetch)`?
+
+1. Not memoize network errors or missing files or something else, as this might be temporary and controlled outside the parameters.
+2. Differentiate between sources that are static and sources that are fluid. Avoid fetching static files with the same function as the fluid file, and avoid keeping the static and fluid responses under the same variable/state property in your application.
+
+What to do when you have a function that errors, but in a way that presents itself as a valid result? Ie. what do you do if you don't want to memoize the `404` results from a `fetch` call, but instead consider them an error on the part of the system??
+
+We need a chapter about custom error format for functions. That is something that should be just wrapped around the original function, and then if it matches a criteria, then it throws an Error.
+
+```javascript
+async function fetchAndErrorOutside200(url, options){
+  const response = await fetch(url, options);
+  if(response.status >= 200 && response.status < 300)
+    throw new Error(response.status); //todo here we could have a custom Error type that would hold the Response object
+  return response;
+}
+
+const memFetch = memoizeNotErrors(fetchAndErrorOutside200);  
+```
+
 ## References
 
 * 
