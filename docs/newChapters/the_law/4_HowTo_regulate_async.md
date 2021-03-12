@@ -79,34 +79,47 @@ console.log('hello sunshine');
 
 ## Demo: sometimes `async`, sometimes `Error`
 
+Here is a regulator that handle both `async`, sync, `throw` and `return` output from an original function.
+
 ```javascript
 function observeFastAndSlowOutput(original) {
 
   function processOutput(output) {
     console.log(original.name, output);
   }
+  function processError(error) {
+    console.warn('error', original.name, error);
+  }
 
   return function regulator(...args) {
-    const output = original(...args);
-    if (output instanceof Promise) {
-      output.then(output2 => processOutput(output2));
-    } else {
-      processOutput(output);
+    try {
+      const output = original(...args);
+      if (output instanceof Promise) {
+        output.then(output2 => processOutput(output2));
+        output.catch(error => processError(error));
+      } else {
+        processOutput(output);
+      }
+      return output;
+    } catch (error) {
+      processError(error);
+      throw error;
     }
-    return output;
   }
 }
 
 async function slowPlus(a, b) {
   await new Promise(r => setTimeout(r, 10));
+  if (a === 0)
+    throw {omg: 'wtf'};
   return a + b;
 }
 
 function fastPlus(a, b) {
-  if(a === 0)
+  if (a === 0)
     throw NaN;
   return a + b;
-  
+
 }
 
 const slowPlus2 = observeFastAndSlowOutput(slowPlus);
@@ -115,12 +128,22 @@ const fastPlus2 = observeFastAndSlowOutput(fastPlus);
 const allGoodThings = slowPlus2(1, 2);
 const moreGoodThings = fastPlus2(1, 2);
 console.log('hello sunshine');
-try{
-  const o_oohh = fastPlus2(0, 2);
-  
+try {
+  const auch = fastPlus2(0, 2);
+} catch (error) {
+  console.log("hello error");
 }
+
+try {
+  const auch = await slowPlus2(0, 2);
+} catch (error) {
+  console.log("hello async error");
+}
+
 //fastPlus 3
 //hello sunshine
+//error fastPlus NaN
+//hello error
 //slowPlus 3
 ```
 
