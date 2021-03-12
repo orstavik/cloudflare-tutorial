@@ -26,7 +26,7 @@ In this demo we:
 
 2. We then replace the function we wish to observe with this regulator, and then we get a beautiful report each time the function is called.
 
-3. We apply this to the problem of
+3. We apply this to the problem of hypotenuse, because this is all the math I remember from school.
 
 ```javascript
 function observeInputOutput(original) {
