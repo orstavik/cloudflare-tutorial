@@ -1,97 +1,163 @@
 # HowTo: regulate?
 
-The basic regulator simply takes an original, input function and wraps it inside a regulated function. 
+The basic FunFunFun simply takes an original, input function and wraps it inside a regulator function. The purpose of the regulator can be many different things, but most common is to:
+
+1. *observe* the time, sequence, and/or input/output, and/or
+2. *adjust or adapt* the input, output, or invocations.
+
+In JS pseudo-code, a FunFunFun that produce a regulator function from an input function, looks like this:
 
 ```javascript
-function regulatorFunction(original) {
-  return function regulated(...args) {
+function funFunFun(original) {
+  return function regulator(...args) {
     //regulate input
     const originalResult = original(...args);
     //regulate output
     return originalResult;
   }
 }
+```
 
-const myRegulatorFunction = regulatorFunction(myOriginalFunction);
-const x = myRegulatorFunction(1, 2, 3);
+## Demo: `observeInputOutput`
+
+In this demo we:
+
+1. create a FunFunFun that makes a regulator that prints a) all the input `args` and b) the `output` each time the function is invoked.
+
+2. We then replace the function we wish to observe with this regulator, and then we get a beautiful report each time the function is called.
+
+3. We apply this to the problem of
+
+```javascript
+function observeInputOutput(original) {
+  return function regulator(...args) {
+    console.log(original.name, 'input', args);
+    const output = original(...args);
+    console.log(original.name, 'output', output);
+    return output;
+  }
+}
+
+Math.pow = observeInputOutput(Math.pow);
+Math.sqrt = observeInputOutput(Math.sqrt);
+
+function hypotenuse(a, b) {
+  return Math.sqrt(Math.pow(a, 2) + Math.pow(b, 2));
+}
+
+const five = hypotenuse(3, 4);
+const betweenOneAndTwo = hypotenuse(1, 2);
+```
+
+Prints this:
+
+```
+// const five = hypotenuse(3,4);
+pow input [3, 2]
+pow output 9
+pow input [4, 2]
+pow output 16
+sqrt input [25]
+sqrt output 5
+
+//const betweenOneAndTwo = hypotenuse(1,2);
+pow input [1, 2]
+pow output 1
+pow input [2, 2]
+pow output 4
+sqrt input [5]
+sqrt output 2.23606797749979```
 ```
 
 ## WhatIs: `this`?
 
-> A pure function produces an output value based on input values and has no side effects. 
+A pure function produces an output value based on input values and has no side effects. A pure function gets all its input data from its arguments, and therefore has no need for `this`. When you regulate pure original functions, you therefore need not worry about the `this`.
 
-For pure functions there is no need to consider `this`. And, often, when discussing higher-order functions, people simply assume that everybody knows about pure functions and try to avoid impure functions as much as possible. The assumption is also that the developer themselves can handle the problems that arise when their functions are impure. This is also mostly true about this tutorial.
+But. Sometimes you need to regulate *context* sensitive functions that use `this`. This is quite a bit more problematic, and I therefore strongly encourage you to try **plan a**: make your original function pure, instead of **plan b**: bind your regulator to a `this` context object.
 
-However, sometimes you do wish to regulate non-pure functions. And, when you do, you need to keep `this` in mind: The regulated function has a *different `this`* than the original.
+Still. If plan B is forced upon you, or this kind of OO machismo is your thing, then here is *one* course of action (of many):
 
-1. The `this` of the regulated function is the regulator function object. This `this` is completely useless. When you want to associate particular properties for the regulator, you do so in the closure that the regulator function itself forms when called.
-      
 ```javascript
-function exaggerate(original) {
-  const factor = 2;                       //YES!
-  return function exaggerated(...args) {
-    const originalResult = original(...args);
-    return originalResult * factor;       //YES!
-    // return originalResult this.factor; //no...
+function ellipsis(original) {
+  return function regulator(...args) {
+    const this2 = this.length <= 8 ? this : (this.substr(0, 5) + '...'); //2
+    return original.call(this2, ...args);                                //3
   }
 }
-// regulatorFunction.factor = 2;          //no...
-Math.abs = exagerrate(Math.abs);
-Math.abs(-2);    // => 4
+
+String.prototype.toLowerCase = ellipsis(String.prototype.toLowerCase); //1
+"HELLO SUNSHINE".toLowerCase();
+//hello...
 ```
 
-2. The `this` of the original function might however be very relevant. And very hard to reach *after* the regulated function has been created. If you need to provide the inner original function with different `this` context along the way, then there are two ways to do so:
+Notice here that we:
 
-   * pass the `this` context of the original function as an argument to the regulated function, or
+1. associate the regulator function with the prototype,
+2. make `this` a local variable `this2`, so that we
+3. can pass the "regulated" `this2` into the `original` function via `.call(this2,...args)` as if it was just another input argument.
+
+Att!! The above example is mostly intended as a deterrent. Even if you manage to grow tomatoes on Mercury, that doesn't make them automatically taste good. Even though there *might* be a two or three `this`-methods on a prototype that *can be* processed with the same regulator, that doesn't mean that it is better to do so than simply writing new prototype methods.
 
 ```javascript
-function expressiveString(smiley, original) {
-  return function express(context, ...args) {
-    const originalResult = original.call(context, ...args);
-    return originalResult + smiley;
+//BAD use of regulators
+function ellipsis(original) {
+  return function regulator(...args) {
+    const this2 = this.length <= 8 ? this : (this.substr(0, 5) + '...');
+    return original.call(this2, ...args);
   }
 }
-const hedge = expressiveString(" :)", String.prototype.toLowerCase);
-hedge("WHAT DID YOU SAY?");    // => what did you say? :) 
-```
-     
-   * add the regulated function to the prototype (this is most likely what you want).
 
-```javascript
-function expressiveString(smiley, original) {
-   return function express(context, ...args) {
-      const originalResult = original.call(this, ...args);
-      return originalResult + smiley;
-   }
-}
-String.prototype.shout = expressiveString("!!!", String.prototype.toUpperCase);
-"what did you say?".shout();    // => "WHAT DID YOU SAY?!!!" 
+String.prototype.toLowerCase = ellipsis(String.prototype.toLowerCase);
+String.prototype.toUpperCase = ellipsis(String.prototype.toLowerCase);
+
+//BETTER use repetition
+(function () {
+  const toLowerCaseOG = String.prototype.toLowerCase;
+  String.prototype.toLowerCase = function () {
+    const this2 = this.length <= 8 ? this : (this.substr(0, 5) + '...');
+    return toLowerCaseOG.call(this2);
+  }
+  const toUpperCaseOG = String.prototype.toUpperCase;
+  String.prototype.toUpperCase = function () {
+    const this2 = this.length <= 8 ? this : (this.substr(0, 5) + '...');
+    return toUpperCaseOG.call(this2);
+  }
+})();
 ```
 
-As you can see, preserving `this` quickly becomes messy. It is not readable code. ObjectOrientation and higher-order functions don't really mix very well. 
+* The code doesn't use `Object.definedProperty` for the sake of simplicity. Actually, I am not sure if we want `Object.defineProperty` in this instance
+
+Conclusion: preserving `this` in regulators quickly becomes messy. It is not readable code. OO and regulators is not a good fit.
 
 ## WhatIs: in a `.name`?
 
-The `.name` of a function is useful when you want to observe that function during debugging, logging. A prime use case for regulator functions is to observe during debugging and logging, and so you often wish to make the `name` of the regulated output function to resemble the `.name` of the original input function. To do this, you need `Object.defineProperty` (the simple `func.name = ...` doesn't work):
+Function names are useful in most use cases for regulators: debugging, logging, unit testing, machine learning, etc. Therefore, giving your regulators a good `.name` is therefore important. You want the `.name` of your regulator to mirror the `.name` of the original function, while at the same time add the ability to inspect which regulator functions has been applied to the original function.
+
+There are two things to note here:
+
+1. To change the `.name` of a `Function` object, you need `Object.defineProperty` (the simple `func.name = ...` doesn't work).
+2. You can either mix in the trace of the regulator in the `.name` itself (for example splitting the name using a convention sign such as `_`), or by adding a reference to the regulators on the `Function` object itself.
 
 ```javascript
-function exaggerate(original) {
-  const factor = 2;
-  const regulated = function(...args) {
-    return original(...args) * factor;
-  };
-   //todo we should probably assign the regulator spec as a list on the function. and just use the original.name as the name.
-   // Object.defineProperty(regulator, 'name', {value: original.name});
-   // regulator.regulators = [stateManager, ...(original.regulators || [])];
-   // regulator.regulators = ['sm', ...(original.regulators || [])]; //this is not the best, i think just adding the function is better
-   Object.defineProperty(regulated, 'name', {value: '_exaggerated_' + original.name});
-  return regulated;
+function observeInputOutput(original) {
+  const regulator = function (...args) {
+    console.log(original.name, 'input', args);
+    const output = original(...args);
+    console.log(original.name, 'output', output);
+    return output;
+  }
+  Object.defineProperty(regulator, 'name', {value: original.name});
+  regulator.regulators = regulator.regulators ? 
+    [observeInputOutput, ...regulator.regulators] : 
+    [observeInputOutput];
+  return regulator;
 }
-Math.abs = exaggerate(Math.abs);
-console.log(Math.abs(-2));    // => 4
-console.log(Math.abs.name); // _exagurated_abs 
+
+Math.abs = observeInputOutput(Math.abs);
+console.log(Math.abs.name); //abs 
+console.log(Math.abs.regulators[0].name); //observeInputOutput 
 ```
 
 ## References
 
- * 
+* add mdn to Function.name 
