@@ -46,7 +46,7 @@ function hypotenuse(a, b) {
 }
 
 const five = hypotenuse(3, 4);
-const betweenOneAndTwo = hypotenuse(1, 2);
+const moreThanTwo = hypotenuse(1, 2);
 ```
 
 Prints this:
@@ -60,7 +60,7 @@ pow output 16
 sqrt input [25]
 sqrt output 5
 
-//const betweenOneAndTwo = hypotenuse(1,2);
+// const moreThanTwo = hypotenuse(1, 2);
 pow input [1, 2]
 pow output 1
 pow input [2, 2]
