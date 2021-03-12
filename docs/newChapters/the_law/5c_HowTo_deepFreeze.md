@@ -1,5 +1,7 @@
 # HowTo: `deepFreeze` any function?
 
+> `Object.freeze` is kinda slow. For example, it is slower than `JSON.stringify`.
+
 To `deepFreeze` an object is simple:
 
 ```javascript
