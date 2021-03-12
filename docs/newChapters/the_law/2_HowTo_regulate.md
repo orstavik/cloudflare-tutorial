@@ -160,4 +160,4 @@ console.log(Math.abs.regulators[0].name); //observeInputOutput
 
 ## References
 
-* add mdn to Function.name 
+* [MDN: Function.name](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/name)
