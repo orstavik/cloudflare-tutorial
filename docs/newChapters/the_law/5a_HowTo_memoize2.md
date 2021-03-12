@@ -1,8 +1,10 @@
 # HowTo: memoize cloneables?
 
-## Demo: Cloneable 1: `DOMNodes`
+## Problem 1: `DOMNodes`
 
-To make a set of `DOMNode`s is a good example of a heavy sync process that is a) most often possible to memoize if you b) always `cloneNode(true)` the result. Here is a demo of such a `memoize` regulator that assumes a sync original function that will not fail/`throw` anything.
+To make a set of `DOMNode`s is a good example of a heavy sync process that is a) most often possible to memoize if you b) always `cloneNode(true)` the result. Here is a demo of such a `memoize` regulator. This demo assumes:
+1. that the original function is always sync, and
+2. that the original function never fails/`throws`.
 
 ```javascript
 function memoizeDOMNodes(original) {
@@ -35,12 +37,38 @@ const c = makeH1('hello sunshine');
 console.log(a !== c);
 ```
 
-## Demo: Cloneable 2: `async` `Response`, with no `Error`
+## Problem 2: `memoize(fetch)` and `Response.clone()`
+
+When we memoize `fetch()` calls, there are several problems and choices that must be made:
+1. We cannot reuse the `Response` object that `fetch()` returns without always `clone()`ing it first (including the first time it is returned).
+2. There are multiple reasons why a temporary network `Error` might arise when memoizing `fetch`, so we do not want to cache `Error`s. 
+3. What about `404`? 
+   
+//todo taking a break here.
+Sometimes during development for example, you might Differentiate between sources that are static and sources that are fluid. Avoid fetching static files with the same function as the fluid file, and avoid keeping the static and fluid responses under the same variable/state property in your application.
+
+What to do when you have a function that errors, but in a way that presents itself as a valid result? Ie. what do you do if you don't want to memoize the `404` results from a `fetch` call, but instead consider them an error on the part of the system??
+
+We need a chapter about custom error format for functions. That is something that should be just wrapped around the original function, and then if it matches a criteria, then it throws an Error.
+
+```javascript
+async function fetchAndErrorOutside200(url, options) {
+  const response = await fetch(url, options);
+  if (response.status >= 200 && response.status < 300)
+    throw new Error(response.status); //todo here we could have a custom Error type that would hold the Response object
+  return response;
+}
+
+const memFetch = memoizeNotErrors(fetchAndErrorOutside200);  
+```
+
+
+## Demo 1: `memoizeResponseNoError`
 
 The `fetch()` is another prime candidate for memoization.
 
 ```javascript
-function memoizeResponse(original) {
+function memoizeResponseNoError(original) {
   const cache = {};
   return function regulator(...args) {
     const key = JSON.stringify(args);
@@ -62,7 +90,7 @@ function memoizeResponse(original) {
   }
 }
 
-const memoFetch = memoizeDOMNodes(fetch);
+const memoFetch = memoizeResponseNoError(fetch);
 
 (async function () {
 
@@ -335,25 +363,6 @@ const efficientMakeObject = asyncMemoize(makeObject);
 
 Att! Often, the heavy functions return objects that must be `clone()` before use.
 
-## HowTo: `memoize(fetch)`?
-
-1. Not memoize network errors or missing files or something else, as this might be temporary and controlled outside the parameters.
-2. Differentiate between sources that are static and sources that are fluid. Avoid fetching static files with the same function as the fluid file, and avoid keeping the static and fluid responses under the same variable/state property in your application.
-
-What to do when you have a function that errors, but in a way that presents itself as a valid result? Ie. what do you do if you don't want to memoize the `404` results from a `fetch` call, but instead consider them an error on the part of the system??
-
-We need a chapter about custom error format for functions. That is something that should be just wrapped around the original function, and then if it matches a criteria, then it throws an Error.
-
-```javascript
-async function fetchAndErrorOutside200(url, options) {
-  const response = await fetch(url, options);
-  if (response.status >= 200 && response.status < 300)
-    throw new Error(response.status); //todo here we could have a custom Error type that would hold the Response object
-  return response;
-}
-
-const memFetch = memoizeNotErrors(fetchAndErrorOutside200);  
-```
 
 ## References
 
