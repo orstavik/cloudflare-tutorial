@@ -20,11 +20,11 @@ function catchAndRelease(original) {
   return function regulator(...args) {
     try {
       const output = original(...args);
-      console.log(original.name, 'output', output);
+      console.log(original.name, 'output', output);                                 //[1]
       return output;
     } catch (error) {
-      console.log(original.name, 'error', error);
-      console.log(error instanceof Object ? error.constructor.name : typeof error);
+      console.log(original.name, 'error', error);                                   //[2]
+      console.log(error instanceof Object ? error.constructor.name : typeof error); //[3]
       throw error;
     }
   }
@@ -44,13 +44,26 @@ const throwWhatEver2 = catchAndRelease(throwWhatEver);
 try {
   throwError2();
 } catch (err) {
-  console.log(err);
+  console.log(err);                                                                 //[4]
 }
 try {
-  throwWhatEver();
+  throwWhatEver2();
 } catch (err) {
-  console.log(err);
+  console.log(err);                                                                 //[5]
 }
+```
+
+Prints this:
+
+```
+//throwError2();
+throwError error Error: hello Error      //[2]
+Error                                    //[3]
+Error: hello Error                       //[4]
+//throwWhatEver2();
+throwWhatEver error {omg: "wtf"}         //[2]
+Object                                   //[3]
+{omg: "wtf"}                             //[5]
 ```
 
 ## HowTo: normalize `Error`s?
@@ -122,4 +135,4 @@ function fetchFail404(...args){
 
 ## References
 
-*  
+* [MDN: Error](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error)
