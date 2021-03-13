@@ -24,13 +24,13 @@ function memoize(original) {
 
 ## Which: functions can we memoize?
 
-You should only memoize pure functions:
+You should mainly memoize pure functions:
 
 1. Pure functions get pure values as input. If you memoize a function whose input values are impure, ie. they contain state information that cannot be serialized/signatured consistently, then your memoized regulated functions might think that:
 	* two functions that are given different input arguments are
 	* two functions that are given identical input arguments.
 
-2. Pure functions produce pure (or at least cloneable) values. If your original function produces an impure output such as a `Stream` object, then these impure objects cannot be reused (without first being cloned or similar). (more about memoizing cloneables in the next chapter).
+2. Pure functions produce pure or "clonable" values. In this chapter we discuss how we memoize functions that produce pure values, and in the next chapter we look at how we memoize impure functions that produce "clonable" outputs.
 
 3. Pure functions have no side effects. If your original function has side-effects, and then the memoize regulator causes some invocations to this function to be skipped, then you have a problem. If the original function has side-effects, you must evaluate if you can skip those side-effects before you memoize it.
 
@@ -103,12 +103,33 @@ function memoize(original) {
 
 ## WhatAbout: `async` memoize?
 
-If you pass an async original function to your memoize function, it will return a `Promise`. We can memoize these `Promises`. But. With a few hickups:
+When you memoize an `async` original function, then the `cache` will simply be filled with `Promise`s. As long as you don't need to handle `Error`s thrown, this is fine (also when an LRU is added).
 
-1. What about `Error` thrown?
-2. Shouldn't we update the `cache` once the `Promise` resolves?
-3. What if this function is applied to sync functions? Do we have to turn the result of the async regulator into a `Promise`?
-3. And how do we mix this all up with an LRU cache?
+However, if you wish to memoize `Error`s too, you must also catch the `Error`s thrown "inside" the `Promise`. The strategy would be to first assume that a `Promise` succeeds, and then once it fails, move it from the `cache` registry to the `errors` registry.
+
+Furthermore, once we have decided to update of the `cache` registry for when a `Promise` rejects, why not also update the `cache` registry when a `Promise` resolves? If we update the `cache` registry with the resolved value when they succeed, then we have the opportunity of turning the `async` original function into a true sync function whenever the `cache` output has been resolved, saving us a microtask entry. This require an adaptation where the code is being used:
+
+The pre-memoize code looked like this:
+```javascript
+const result = await getDataFromServer('https://example.com');
+```
+
+When we memoize it, it looks like this:
+```javascript
+const memFetch = asyncMemoize(getDataFromServer);
+
+const tmp = memFetch('https://example.com');
+const result = tmp instanceof Promise ? await tmp : tmp;
+```
+
+And this is because `await` *always* forces the rest of the code to be delayed as a microtask:
+```javascript
+(async function () {
+  Promise.resolve().then(() => console.log("two (added to the next microtask)"));
+  console.log("one (current microtask)");
+  console.log(await "three (added to the next microtask also)");
+})();
+```
 
 Below is a demo that does this. It will manage async functions, with potential `Error`s, and update the cache register with the settled value once cleared. If the `Promise` fails belatedly, then the `Promise` and key in the cache is cleared. All with LRU enabled.
 
@@ -150,10 +171,6 @@ function memoize(original, size = 100) {
     }
   }
 }
-
-const memoAbs = memoize(Math.abs);
-const two = memoAbs(-2);
-const twotwo = memoAbs(-2);
 ```
 
 ## References
