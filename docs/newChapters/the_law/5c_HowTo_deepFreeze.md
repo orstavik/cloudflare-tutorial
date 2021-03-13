@@ -57,5 +57,5 @@ console.log(frozenAsAPopsicle.hello); // => sunshine
 ```
 
 ## References
-
-* 
+* [MDN: Object.freeze()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze)
+* [MDN: Object.getOwnPropertyNames()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/getOwnPropertyNames)
