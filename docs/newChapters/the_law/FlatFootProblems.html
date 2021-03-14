@@ -1,0 +1,91 @@
+<script>
+
+  function observe(...originals) {
+    return originals.map(original => {
+      return function regulator(...args) {
+        console.log(original.name, ...args);
+        return original(...args);
+      }
+    });
+  }
+
+  //1. simulate accessing functions created in another scope
+  var [goBananas, goGorillas, goJungle] = (function () {
+    function goBananas() {
+      return "bananas";
+    }
+
+    function goGorillas() {
+      return "gorillas";
+    }
+
+    function goJungle() {
+      return [goGorillas(), goBananas()];
+    }
+
+    return [goBananas, goGorillas, goJungle];
+  })();
+
+  [goGorillas, goBananas, goJungle] = observe(goGorillas, goBananas, goJungle);
+  goJungle();
+  //"goJungle"
+  //only prints the top most function, as the encapsulated ones are hidden inside the
+
+  //2. simulate accessing functions created in the same scope
+  function goIce() {
+    return "ice";
+  }
+
+  function goPolarBears() {
+    return "polar bears";
+  }
+
+  function goNorthPole() {
+    return [goIce(), goPolarBears()];
+  }
+
+  [goIce, goPolarBears, goNorthPole] = observe(goIce, goPolarBears, goNorthPole);
+  goNorthPole();
+  //goNorthPole
+  //goIce
+  //goPolarBears
+  //access all three because we mess up and manipulate variables pointing to functions in the same scope.
+  //this is not a technique, this is a mess.
+
+  //3. simulate accessing recursive functions (in the same scope mess)
+  var powa = function (a, b) {
+    if (b > 0) return a * powa(a, b - 1);
+    if (b === 0) return 1;
+    throw new Error('we are strictly positive, forced smiles upon all faces!');
+  };
+
+  [powa] = observe(powa);
+  console.log(powa(2, 5));
+  //prints
+  //recursiveExponent 2 5
+  //recursiveExponent 2 4
+  //recursiveExponent 2 3
+  //recursiveExponent 2 2
+  //recursiveExponent 2 1
+  //recursiveExponent 2 0
+  //32
+
+  //4. recursive functions defined in a different scope
+  let powb = (function () {
+
+    function powb(a, b) {
+      if (b > 0) return a * powb(a, b - 1);
+      if (b === 0) return 1;
+      throw new Error('we are strictly positive, forced smiles upon all faces!');
+    }
+
+    return powb;
+  })();
+
+  [powb] = observe(powb);
+  console.log(powb(2, 5));
+  //prints
+  //recursiveExponent 2 5
+  //32
+
+</script>
