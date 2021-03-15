@@ -1,8 +1,42 @@
 # HowTo: memoize cloneables?
 
+In this chapter we discuss memoizing functions that return clonable outputs.
+
+## Demo: a generic `memoizeClone()` (no `Error` retention)
+
+We start this discussion by presenting a generic memoize function that handle cloneable outputs. This function do not memoize `Error`s thrown.
+
+```javascript
+function memoizeClone(original, size = 100) {
+  const cache = {};
+  return function regulator(...args) {
+    const key = JSON.stringify(args);
+    if (key in cache) {
+      const value = cache[key];
+      delete cache[key];
+      cache[key] = value;
+      return value instanceof Promise ?
+        value.then(clonable => clonable.clone()) :
+        value.clone();
+    }
+    const res = original(...args);
+    const keys = Object.keys(cache);
+    keys.length >= size && delete cache[keys[0]];
+    cache[key] = res;
+    if (res instanceof Promise) {
+      res.then(res2 => cache[key] = res2);
+      res.catch(error => delete cache[key]);
+      return res.then(clonable => clonable.clone());
+    }
+    return res.clone();
+  }
+}
+```
+
 ## Problem 1: `DOMNodes`
 
 To make a set of `DOMNode`s is a good example of a heavy sync process that is a) most often possible to memoize if you b) always `cloneNode(true)` the result. Here is a demo of such a `memoize` regulator. This demo assumes:
+
 1. that the original function is always sync, and
 2. that the original function never fails/`throws`.
 
@@ -23,261 +57,60 @@ function memoizeDOMNodes(original) {
   }
 }
 
-function makeH1(text) {
-  const h1 = document.createElement('h1');
-  h1.innerText = text;
-  return h1;
+function txtToDOM(txt) {
+  const t = document.createElement('template');
+  t.innerHTML = txt.trim();
+  return t.content.firstChild;
 }
 
-makeH1 = memoizeDOMNodes(makeH1);
+txtToDOM = memoizeDOMNodes(txtToDOM);
 
-const a = makeH1('hello sunshine');
-const b = makeH1('hello world');
-const c = makeH1('hello sunshine');
+const a = txtToDOM('<h1>hello sunshine</h1>');
+const b = txtToDOM('<h1>hello world</h1>');
+const c = txtToDOM('<h1>hello sunshine</h1>');
 console.log(a !== c);
 ```
 
+Att!! This is not an alternative to a stronger template engine such as uhtml and similar.
+
 ## Problem 2: `memoize(fetch)` and `Response.clone()`
 
-When we memoize `fetch()` calls, there are several problems and choices that must be made:
-1. We cannot reuse the `Response` object that `fetch()` returns without always `clone()`ing it first (including the first time it is returned).
-2. There are multiple reasons why a temporary network `Error` might arise when memoizing `fetch`, so we do not want to cache `Error`s. 
-3. What about `404`? 
-   
-//todo taking a break here.
-Sometimes during development for example, you might Differentiate between sources that are static and sources that are fluid. Avoid fetching static files with the same function as the fluid file, and avoid keeping the static and fluid responses under the same variable/state property in your application.
+When we memoize `fetch()`, we must make several choices:
 
-What to do when you have a function that errors, but in a way that presents itself as a valid result? Ie. what do you do if you don't want to memoize the `404` results from a `fetch` call, but instead consider them an error on the part of the system??
+1. Some parts of your app might use `fetch()` to get data from fluid sources such as a json file representing the latest chat messages in a chatroom. Other parts of your app might use `fetch()` to get static resources such as `.html`, `.css`, and `.js` files. Therefore, you likely want to memoize only some call instances to `fetch()`, not all.
+2. The `fetch()` returns a `Response` object. But. We cannot reuse the `Response` object directly. Each `Response` object can only be used once, and therefore we must *always* `.clone()` the `Response` before we use them (even the first time).
+3. `fetch()` depends on a network connection. Networks are not stable: a `fetch()` call may throw an `Error` right now, and then very well succeed in a minute or a ms. Thus, we most often do not want to memoize `fetch()` thrown errors.
+4. `HTTP` has its own syntax of errors: `404`, `500`, etc. Do we wish to *cache* such results? Or do we wish to avoid memoizing failing results?
 
-We need a chapter about custom error format for functions. That is something that should be just wrapped around the original function, and then if it matches a criteria, then it throws an Error.
+Thus. When we `memoize(fetch)`, we therefore commonly choose *not* memoize `Error`s. This gives us a simple in/out criteria, that we can use to handle error `status` codes too. However, we do not need to filter `status` codes inside the regulator, we can do this in a plain old javascript function like this:
 
 ```javascript
-async function fetchAndErrorOutside200(url, options) {
+async function myFetch(url, options) {
   const response = await fetch(url, options);
-  if (response.status >= 200 && response.status < 300)
-    throw new Error(response.status); //todo here we could have a custom Error type that would hold the Response object
+  if (response.status === 404)
+    throw new Error('404: FileNotFound');   //We intend not to memoize 404
   return response;
 }
 
-const memFetch = memoizeNotErrors(fetchAndErrorOutside200);  
-```
+const memoMyFetch = memoize(myFetch);
+```       
 
-
-## Demo 1: `memoizeResponseNoError`
-
-The `fetch()` is another prime candidate for memoization.
+Similarly, if we wish to memoize only a *select few types* of `Error`s thrown, we can also do this outside the regulator in a similar plain old javascript function. 
 
 ```javascript
-function memoizeResponseNoError(original) {
-  const cache = {};
-  return function regulator(...args) {
-    const key = JSON.stringify(args);
-    if (key in cache) {
-      const value = cache[key];
-      delete cache[key];
-      cache[key] = value;
-      if (value instanceof Promise)
-        return value.then(response => response.clone());
-      return value.clone();
-    }
-    const keys = Object.keys(cache);
-    keys.length >= size && delete cache[keys[0]];
-    const promise = original(...args);
-    cache[key] = promise;
-    promise.then(response => cache[key] = response);
-    promise.then(response => delete cache[key]);
-    return promise.then(response => response.clone());
-  }
-}
-
-const memoFetch = memoizeResponseNoError(fetch);
-
-(async function () {
-
-  let a = memoFetch('https://example.com/a');
-  if (a instanceof Promise){
-    console.log("a is a ", a.constructor.name);
-    a = await a;
-    console.log("a is now a ", a.constructor.name);
-  }
-  const b = memoFetch('https://example.com/a');
-  console.log("b is a ", a.constructor.name);
-  console.log(a !== b);
-})();
-```
-
-How you can memoize two impure, but cloneable outputs: `DOMNode` and `Response` objects. Making `DOMNode`s is a good example of a heavy sync ; `fetch()` is a good example of a heavy async function that returns a `Response` object that must be `clone()`d before (re)use.
-
-The demo below holds three different memoize functions:
-
-1. `memoizeDOMNodes`. This assumes a sync function, and will memoize/cache `Error`s.
-2. `asyncMemoizeFetch`. This is the simple `async` variant, with no `Error` management.
-3. `memoizeFetch`. This variant updates the cache to contain the `Response` object once the initial `Response` has settled.
-
-```javascript
-function memoizeLRU(fun, size = 100) {
-
-  function toCloneOrNot(output) {
-    return output instanceof Object && output.clone instanceof Function ? output.clone() :
-      output instanceof Object && output.cloneNode instanceof Function ? output.cloneNode(true) : output;
-  }
-
-  const cache = {};
-  const fun2 = function (...args) {
-    const key = JSON.stringify(args);
-    if (key in cache) {
-      const value = cache[key];
-      delete cache[key];
-      cache[key] = value;
-      return value instanceof Promise ? value.then(res2 => toCloneOrNot(res2)) : toCloneOrNot(value);
-    }
-    const keys = Object.keys(cache);
-    keys.length >= size && delete cache[keys[0]];
-    const res = original(...args);
-    if (!(res instanceof Promise))
-      return toCloneOrNot(cache[key] = res);
-    cache[key] = res; //adding the promise for now.
-    res.catch(err => delete cache[key]);
-    return res.then(res2 => toCloneOrNot(cache[key] = res2));
-  }
-  Object.defineProperty(fun, 'name', {value: '_mem_' + fun.name});
-  return fun2;
-}
-```
-
-### Test: neverForget!
-
-```javascript
-function memoize(original) {
-  const cache = {};
-  const error = {};
-  return function memoized(...args) {
-    const key = JSON.stringify(args);
-    if (cache[key])
-      return cache[key];
-    if (error[key])
-      throw error[key];
-    try {
-      const res = original(...args);
-      return cache[key] = res;
-    } catch (err) {
-      throw error[key] = err;
-    }
-  }
-}
-
-function get(obj, key) {
-  return obj[key];
-}
-
-const efficientGet = memoize(get);
-
-try {
-  efficientGet(null, 'hello');
-} catch (err) {
-  err.test = 0;
-  console.log(err.test++); //0
-  console.log(err.message);//Cannot read property 'hello' of null
-}
-
-try {
-  efficientGet(null, 'hello');
-} catch (err) {
-  console.log(err.test++); //1, because it is the same Error object that is reused.
-  console.log(err.message);//Cannot read property 'hello' of null
-}
-```
-
-## Step3: asyncMemoize
-
-In the post-corona world of Javascript programming, no function is worth writing if one is not also willing to wait for its return.
-
-```javascript
-function asyncMemoize(original) {
-  const cache = {};
-  return function memoized(...args) {
-    const key = JSON.stringify(args);
-    if (cache[key])
-      return cache[key];
-    const res = original(...args);
-    if (res instanceof Promise) {
-      res.then(res2 => cache[key] = res2);
-      res.catch(err => delete cache[key]);
-    }
-    return cache[key] = res;
+async function myFetch2(url, options) {
+  try {
+    return await fetch(url, options);
+  } catch (error) {
+    return new Response('FileNotFound', {status: 404}); //we intend to memoize certain errors
   }
 }
 ```
 
-## HowTo: memoizeLRU and support cloneable?
-
-Often, the function you wish to memoize returns an impure, but cloneable value: `fetch` returns a `Response` object, or you may have a heavy custom function that returns a DOM node. You cannot simply reuse the previous object in this instance, but you can reuse a `clone()` of that object.
-
-If you know that you will only memoize `Response` objects for example, then you can do this:
+## Test: one
 
 ```javascript
-function memoizeLRU(fun, size = 100) {
-
-  const cache = {};
-  const fun2 = function (...args) {
-    const key = JSON.stringify(args);
-    if (key in cache) {
-      const value = cache[key];
-      delete cache[key];
-      cache[key] = value;
-      return value instanceof Promise ? value.then(res2 => res2.clone()) : value.clone();
-    }
-    const keys = Object.keys(cache);
-    keys.length >= size && delete cache[keys[0]];
-    const res = original(...args);
-    if (!(res instanceof Promise))
-      return cache[key] = res, res.clone();
-    cache[key] = res; //adding the promise for now.
-    res.catch(err => delete cache[key]);
-    return res.then(res2 => (cache[key] = res2, res2.clone()));
-  }
-  Object.defineProperty(fun, 'name', {value: '_mem_' + fun.name});
-  return fun2;
-}
-```
-
-Here is the memoize function that works for both pure outputs, `Reponse` objects, and DOM `Node`s.
-
-```javascript
-function memoizeLRU(fun, size = 100) {
-
-  function toCloneOrNot(output) {
-    return output instanceof Object && output.clone instanceof Function ? output.clone() :
-      output instanceof Object && output.cloneNode instanceof Function ? output.cloneNode(true) : output;
-  }
-
-  const cache = {};
-  const fun2 = function (...args) {
-    const key = JSON.stringify(args);
-    if (key in cache) {
-      const value = cache[key];
-      delete cache[key];
-      cache[key] = value;
-      return value instanceof Promise ? value.then(res2 => toCloneOrNot(res2)) : toCloneOrNot(value);
-    }
-    const keys = Object.keys(cache);
-    keys.length >= size && delete cache[keys[0]];
-    const res = original(...args);
-    if (!(res instanceof Promise))
-      return toCloneOrNot(cache[key] = res);
-    cache[key] = res; //adding the promise for now.
-    res.catch(err => delete cache[key]);
-    return res.then(res2 => toCloneOrNot(cache[key] = res2));
-  }
-  Object.defineProperty(fun, 'name', {value: '_mem_' + fun.name});
-  return fun2;
-}
-```
-
-test:
-
-```javascript
-  function createDOM() {
+function createDOM() {
   return document.createElement('div');
 }
 
@@ -320,7 +153,7 @@ const asyncSum2 = memoizeLRU(asyncSum);
 })();
 ```
 
-## Test: asyncMemoize //todo add test for lru
+## Test: 2 asyncMemoize
 
 ```javascript
 function asyncMemoize(original) {
@@ -360,9 +193,6 @@ const efficientMakeObject = asyncMemoize(makeObject);
   console.log(d2, d2 === a2);     //we even get the cached object immediately, if we want to skip await
 })();
 ```
-
-Att! Often, the heavy functions return objects that must be `clone()` before use.
-
 
 ## References
 

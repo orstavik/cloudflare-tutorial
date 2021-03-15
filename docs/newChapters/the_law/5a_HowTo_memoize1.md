@@ -101,6 +101,49 @@ function memoize(original) {
 >
 > The answer is: it depends. Most of all it depends on the original function and your use of that original function. Secondly, it depends on the `Error`, its type and instance and context. For some original functions and some `Error`s you might like to try several times, for other original functions, you might like to avoid making the same mistake twice, needlessly.
 
+### Test: neverForget!
+
+```javascript
+function memoize(original) {
+  const cache = {};
+  const error = {};
+  return function memoized(...args) {
+    const key = JSON.stringify(args);
+    if (cache[key])
+      return cache[key];
+    if (error[key])
+      throw error[key];
+    try {
+      const res = original(...args);
+      return cache[key] = res;
+    } catch (err) {
+      throw error[key] = err;
+    }
+  }
+}
+
+function get(obj, key) {
+  return obj[key];
+}
+
+const efficientGet = memoize(get);
+
+try {
+  efficientGet(null, 'hello');
+} catch (err) {
+  err.test = 0;
+  console.log(err.test++); //0
+  console.log(err.message);//Cannot read property 'hello' of null
+}
+
+try {
+  efficientGet(null, 'hello');
+} catch (err) {
+  console.log(err.test++); //1, because it is the same Error object that is reused.
+  console.log(err.message);//Cannot read property 'hello' of null
+}
+```
+
 ## WhatAbout: `async` memoize?
 
 When you memoize an `async` original function, then the `cache` will simply be filled with `Promise`s. As long as you don't need to handle `Error`s thrown, this is fine (also when an LRU is added).
