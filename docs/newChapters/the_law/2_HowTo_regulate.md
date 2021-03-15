@@ -161,3 +161,4 @@ console.log(Math.abs.regulators[0].name); //observeInputOutput
 ## References
 
 * [MDN: Function.name](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/name)
+* [simple tutorial on logging using higher order functions](https://levelup.gitconnected.com/higher-order-functions-in-javascript-566ed1d32db6)
