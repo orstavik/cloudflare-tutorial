@@ -47,7 +47,7 @@ function goGorillas(){
   return "gorillas";
 }
 
-function theJungle(sometimes){
+function goJungle(sometimes){
   if(sometimes)
     return [goBananas(), goGorillas()];
   return [goBananas()];
