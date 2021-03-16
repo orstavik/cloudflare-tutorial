@@ -1,13 +1,5 @@
 # Problem: function arguments
 
-## Deep vs. shallow regulators
-
-In the previous chapters, we have implicitly discussed deep vs shallow combinators.
-
-A shallow combinator adds a regulator *only* to the outermost initial function call of an original function instance. Once original function is called, and the flow of control passes into the original function, there is no trace of the regulator inside the original function. The regulator is just a shallow wrapper around the outermost function call of the original function.
-
-A deep combinator *infuses* regulators not only on the outermost initial function call, but also function calls *inside* the original function.
-
 ## Strategies for making deep combinators
 
 The previous chapter described how we can mutate function references inside original functions to achieve *deep* regulators. In this chapter we will describe a different strategy that we call function arguments.
