@@ -55,7 +55,7 @@ function theJungle(sometimes){
 
 const observedBananas = observe(goBananas);
 const observedGorillas = observe(goGorillas);
-const observedJungle = observe(goJungle);
+const observedJungle = observe(theJungle);
 
 observedBananas();      //1
 console.log("---")
@@ -86,7 +86,7 @@ theJungle  | theJungle
 
 The answer is: **scenario A** that *only* trigger `observedJungle()`. Why? 
 
-When the `observe` function wraps around the `goJungle()` function, then there is nothing happening to the pointers to the function objects `goBananas()` and `goGorillas()` inside the original `goJungle()` function. Nothing changes *inside* the original function call instance, only outside it.    
+When the `observe` function wraps around the `theJungle()` function, then there is nothing happening to the pointers to the function objects `goBananas()` and `goGorillas()` inside the original `theJungle()` function. Nothing changes *inside* the original function call instance, only outside it.    
 
 ## Discussion
 

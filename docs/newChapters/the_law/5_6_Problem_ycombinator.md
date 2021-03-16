@@ -1,4 +1,7 @@
-# Problem: function arguments
+# Pattern: WhyBird/functions as arguments
+
+As we will see in the next chapters, it is simpler to automatically apply deep regulation to recursive functions. However, it is also possible to automatically apply deep regulation to any function, as long as the inner function objects to be regulated are passed in as *arguments in the original function*.
+
 
 ## Strategies for making deep combinators
 
