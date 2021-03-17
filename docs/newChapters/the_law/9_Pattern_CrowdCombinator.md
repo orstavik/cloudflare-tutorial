@@ -57,14 +57,14 @@ function sumImpl(a, b) {
   return a + b;
 }
 
-const [callSequence, sum, pow, sqrt] = callSequenceCombinator(sumImpl, Math.pow, Math.sqrt);
+const [sum, pow, sqrt, callSequence] = callSequenceCombinator(sumImpl, Math.pow, Math.sqrt);
 
 function hypotenuse(a, b) {
   return sqrt(sum(pow(a, 2), pow(b, 2)));
 }
 
 console.log(hypotenuse(3, 4)); //=> 5
-console.log(callSequence);     //=> ["pow", "pow", "sumImpl", "sqrt"]
+console.log(callSequence());   //=> ["pow", "pow", "sumImpl", "sqrt"]
 ```
 
 ## References
