@@ -95,7 +95,7 @@ async function myFetch(url, options) {
 const memoMyFetch = memoize(myFetch);
 ```       
 
-Similarly, if we wish to memoize only a *select few types* of `Error`s thrown, we can also do this outside the regulator in a similar plain old javascript function. 
+Similarly, if we wish to memoize only a *select few types* of `Error`s thrown, we can also do this outside the regulator in a similar plain old javascript function.
 
 ```javascript
 async function myFetch2(url, options) {
@@ -111,19 +111,21 @@ async function myFetch2(url, options) {
 
 ```javascript
 function memoizeLRU(original, size = 100) {
- const cache = {};
-   if (key in cache) {
-     const value = cache[key];
-     delete cache[key];
-     return cache[key] = value;
-   }
+  const cache = {};
+  return function regulator(...args) {
+    const key = JSON.stringify(args);
+    if (key in cache) {
+      const value = cache[key];
+      delete cache[key];
+      return cache[key] = value;
+    }
     const keys = Object.keys(cache);
     keys.length >= size && delete cache[keys[0]];
     const res = original(...args);
     return cache[key] = res;
   }
 }
- 
+
 function createDOM() {
   return document.createElement('div');
 }
