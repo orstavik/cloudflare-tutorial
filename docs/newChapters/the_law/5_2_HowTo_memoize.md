@@ -41,7 +41,7 @@ To make a set of `DOMNode`s is a good example of a heavy sync process that is a)
 2. that the original function never fails/`throws`.
 
 ```javascript
-function memoizeDOMNodes(original) {
+function memoizeDOMNodes(original, size = 100) {
   const cache = {};
   return function regulator(...args) {
     const key = JSON.stringify(args);
@@ -68,7 +68,7 @@ txtToDOM = memoizeDOMNodes(txtToDOM);
 const a = txtToDOM('<h1>hello sunshine</h1>');
 const b = txtToDOM('<h1>hello world</h1>');
 const c = txtToDOM('<h1>hello sunshine</h1>');
-console.log(a !== c);
+console.log(a !== c); //true
 ```
 
 Att!! This is not an alternative to a stronger template engine such as uhtml and similar.
@@ -110,6 +110,20 @@ async function myFetch2(url, options) {
 ## Test: one
 
 ```javascript
+function memoizeLRU(original, size = 100) {
+ const cache = {};
+   if (key in cache) {
+     const value = cache[key];
+     delete cache[key];
+     return cache[key] = value;
+   }
+    const keys = Object.keys(cache);
+    keys.length >= size && delete cache[keys[0]];
+    const res = original(...args);
+    return cache[key] = res;
+  }
+}
+ 
 function createDOM() {
   return document.createElement('div');
 }
@@ -153,6 +167,15 @@ const asyncSum2 = memoizeLRU(asyncSum);
 })();
 ```
 
+The result will be:
+
+```
+true
+false
+false {hello: "sunshine"} {hello: "sunshine"} true
+false <div>​</div>​ <div>​</div>​ false
+```
+
 ## Test: 2 asyncMemoize
 
 ```javascript
@@ -194,6 +217,15 @@ const efficientMakeObject = asyncMemoize(makeObject);
 })();
 ```
 
+The output will be:
+
+```
+Promise {<pending>} Promise {<pending>} true
+{hello: "sunshine"} {hello: "sunshine"} true
+{hello: "sunshine"} true
+{hello: "sunshine"} true
+```
+
 ## References
 
-* 
+* [Memoize JavaScript Promises for Performance](https://medium.com/globant/memoize-javascript-promises-for-performance-1c77117fb6b8)
