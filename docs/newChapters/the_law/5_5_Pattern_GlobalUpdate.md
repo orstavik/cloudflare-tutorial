@@ -110,9 +110,9 @@ _sqrt 25
 5
 ```
 
-## Limitations: established libraries arn't prepped for deep combinators
+## Problem: deep regulators in existing libraries
 
-The problem with this approach is that the library that you are going to apply combinators too, must use functions via a global property. Expect that they don't. You can see the problem when we apply the same concept to the builtin `Math` library.
+The problem with this approach is that the library that you are going to apply combinators too, must use functions via a global property. Expect that establish libaries don't do this. You can see the problem when we apply the same concept to the builtin `Math` library.
 
 ```javascript
 (function () {
@@ -141,10 +141,6 @@ pow 5 3
 hypot 3 4
 5
 ```
-
-## Discussion
-
-As you can see, it is only the global variable pointing to a function that is replaced. If the library doesn't internally use the same pointers in their internal functions, which they rarely do, then you can't *make a regulator go deep* using this strategy.
 
 ## References
 
