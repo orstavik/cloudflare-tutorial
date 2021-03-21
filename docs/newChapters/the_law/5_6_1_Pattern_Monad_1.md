@@ -117,19 +117,21 @@ But a question remains, how deep does the concept of state go in the monad? Why 
 
 The query methods are plain, old JS methods, but with one restriction: *no mutations*. If you are making a monad, and you need to for example reduce the set of objects inside the monad and report out the result, you must either 1) create a temporary version of the reduced set that you discard later, or 2) split your task into a convert method and then a query method.
 
-## Monad ivar-style?
+Now, it is possible to imagine a hybrid query+side-effect method: a method that both alter some state underlying the monad, and that also produce a value, for example something that says something about that state. However. This is not a preferred method. Why? Because side-effects should be clearly marked, and giving them their own method is beneficial. It is therefore strongly preferred to have two separate methods being called where the monad is used: first one with side-effects, and then one producing a value without any side-effects. However, if you *really, really* can't or need or want to combine side-effects and query into one, then the consequence is nothing other than your monad having a query method with hidden side-effects.
 
-I believe that the Monad pattern is best understood as a set of additional restrictions for `class` and object instances. I will not say that everything should be Monads, but if you feel like you *must* make a `class` for something, then it is *more than likely* that what you should make is a monad type.
+## Monad, just an object? Or, should objects just be monads?
 
-The practicaly list of rules for the monad pattern when you make it ivar-style in JS is:
-1. make a `class` for the monad type,
-2. don't `extend` that class, no classical inheritance, the prototype hierarchy is as flat as it can be.
-3. create monad instances using the `constructor`, but wrap the `constructor` one or more `static` factory methods on the Monad `class` before you export your monad as a library.
-4. If one of the methods on your monad makes a state change of the set of the monad, *and* the JS engine *can* hold *both* the old state and the new state in memory at the same time, then that method should be a convert method that returns a new instance of the same monad `class`. Cf. `$("h1").add("h2")`.
-5. If one of the methods on your monad makes a state change in the set of the monad, but it is impossible for the JS engine to hold both the old and the new state in memory at the same time, then this method should be a side-effect method and side-effect methods should always return the same instance as it was called on. Cf. `$("h1").css("color", "blue")`. 
-6. If your method a) do not make any state changes, and b) returns something that cannot be classified as a set in the monad `class` (ie. you cannot use the return value from the method to return a monad instance of the same type), then that is a query method.
-7. your monad `class`/objects should have no other properties than `constructor`s, `static` factory functions, convert methods, side-effect methods, and query methods.
-8. And remember, no `extends`.
+I believe that the Monad pattern is best understood as a set of additional restrictions for `class` and object instances that *enforce **immutability** in a particular way*. I will not say that everything should be Monads, but if you feel like you *must* make a `class` for something, then it is *more than likely than not* that what you need is a monad.
+
+Here is my rules of thumb for making monads in JS:
+1. Make a `class` for the monad type.
+2. **NO** `extends`: no classical inheritance.
+3. You can create monad instances using the `constructor` and `new` in the beginning. But, before you export your monad as a library, you should wrap the `constructor` in `static` factory functions.
+4. If one of the methods on your monad needs to make a state change, *and* the JS engine can hold *both* old and new state in memory at the same time, then that method should be a convert method. The convert methods *always* return `new` instances of the same monad `class`. Cf. `$("h1").add("h2")`.
+5. If one of the methods on your monad makes a state change in the set of the monad, *but* the JS engine can **NOT** hold *both* the new and old state in memory at the same time, then this method should be a side-effect method. Side-effect methods should always return the same instance as it was called on. Cf. `$("h1").css("color", "blue")`. 
+6. If your method a) do not make any state changes, and b) should return something other than a monad instance, then that is a query method. Query methods should strive to be pure getters or computers based on the established state, and avoid changing state as far as possible.   
+7. Your monad object instances should have no other properties than convert methods, side-effect methods, and query methods. In addition to `constructor`s and `static` factory functions your monad `class` can have `static`, pure functions and `static` constants.
+   * The reason that native JS `Array`s are not considered monads is because they contain "in place" functions such as `.push(..)` and `.sort()` that **mutate** the state of the `Array` object. JS `Array`s can often resemble Monads with their `.map()` and `.filter()` convert methods.
 
 ## References
 
