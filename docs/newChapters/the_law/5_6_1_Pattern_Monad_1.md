@@ -131,7 +131,7 @@ Here is my rules of thumb for making monads in JS:
 5. If one of the methods on your monad makes a state change in the set of the monad, *but* the JS engine can **NOT** hold *both* the new and old state in memory at the same time, then this method should be a side-effect method. Side-effect methods should always return the same instance as it was called on. Cf. `$("h1").css("color", "blue")`. 
 6. If your method a) do not make any state changes, and b) should return something other than a monad instance, then that is a query method. Query methods should strive to be pure getters or computers based on the established state, and avoid changing state as far as possible.   
 7. Your monad object instances should have no other properties than convert methods, side-effect methods, and query methods. In addition to `constructor`s and `static` factory functions your monad `class` can have `static`, pure functions and `static` constants.
-   * The reason that native JS `Array`s are not considered monads is because they contain "in place" functions such as `.push(..)` and `.sort()` that **mutate** the state of the `Array` object. JS `Array`s can often resemble Monads with their `.map()` and `.filter()` convert methods.
+   * JS native `Array`s break this rule. The in place `.push()` and `.pop()` methods **mutate** the state of the `Array` object itself. Thus, while having monadic features and convert methods such as `.map()` and `.filter()`, `Array`s are not proper monads.
 
 ## References
 
