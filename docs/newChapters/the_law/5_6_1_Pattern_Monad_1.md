@@ -2,63 +2,74 @@
 
 In the previous chapter about dynamic variables, we scratched the surface of the problem of establishing dynamic variables. Today we solve this problem, today we monad.
 
-In this description we are deliberately starting from JS terminology and JS coding practices.There are two reason for this: a) monad terminology is kinda weird, for example "return" means "create"; and b) the difference between monad/functional programming and JS/imperative/ObjectOriented descriptions often imply a distinction that neither exists, is necessary, nor good. Thus. Speaking about the monad pattern in JS with the words of JS makes it easier for us to see *why* and *how* the monad thing actually works.  
+Here, we deliberate use JS terminology and JS coding practices, *not* established "monad terminology". There are two reason for this: 
+1. Monad terminology is kinda weird when you are already neck deep in JS terminology. For example "return" means "constructor". 
+2. When monad and JS terminology use different words about the same thing, this implies a distinction that neither exists, is necessary, nor good. 
+   
+So. We here will use JS words to explain the monad pattern. And we hope that will make it easier for us to see *what* a monad is, *why* we use them, and *how* they work.
 
 ## The Monad life cycle
 
-The monad is **an object**, and the monad lifecycle is:
+A monad is **an object**, and a monad's lifecycle is:
 
 1. **construct**. Monad `constructor` functions:
-   1. uses its input to create a new state of objects/values, 
-   2. wraps this state inside a monad object, and
-   3. returns the monad object. 
-   
+	1. use input to create a new state of objects/values,
+	2. wrap this state inside a monad object instance, and
+	3. returns the monad object.
+
 2. **convert**. Monad convert methods:
-   1. process the state of the monad in some way to produce a **new state instance** (without mutating the original state instance),
-   2. wrap the new state instance in a **new monad instance** (with the same monad type as the original), and
-   3. return the new monad instance.
+	1. process the state of the monad in some way to produce a **new state instance** (without mutating the original state instance),
+	2. wrap the new state instance in a **new monad instance** (with the same monad type as the original), and
+	3. return the new monad instance.
 
 3. **side-effect**. Monad side-effect methods:
-   1. mutate external system components that it selects using the monad state, and 
-   2. return the monad object itself.
-	
+	1. mutate external system components that it selects using the monad state, and
+	2. return the monad object itself.
+
    Side-effects do *not* change the state of the monad itself: if the monad wraps a list of objects for example, a side-effect method will not create a new list of references, but it may very well mutate a value inside that list of objects.
 
 4. **query**. Monad query methods:
-   1. create a new value/object by combining a) the arguments, b) the state of the monad, and c) the algorithm of the query method, and
-   2. return the value/object.
-      
+	1. create a new value/object by combining a) the arguments, b) the state of the monad, and c) the algorithm of the query method, and
+	2. return the value/object.
+
    A query method neither creates a new monad state, change the state of the monad, nor cause any side-effects.
 
-Monads commonly have many constructors, converters, side-effect methods, and query methods.
+Monads commonly have many constructors (factory methods), converters, side-effect methods, and query methods.
 
 ## Monad `constructor`
 
-Commonly, monads are described as being created by a plain `function`s, not `constructor`s. There are two reasons for this: 
+Commonly, monads are described as being created by a plain `function`s, not `constructor`s. There are three reasons for this:
 
-1. The monad pattern is most common in functional programming and used in many programming languages that do not have `constructor`s. In this environment, the monad often replace the object/class patterns we know in JS.
+1. The monad pattern is more common in functional programming and programming languages that do not have `constructor`s. In these environments, the monad often replace the object/class patterns we know from JS.
 
-2. The `constructor` pattern in JS is a bit flawed because JS doesn't allow method overloading. That means that if you have two very different ways to create a monad of the same type, then you would have to cram those into the same `constructor` function and do lots of argument type checking or adding arguments to identify which `constructor` scenario should be used. In JS this is solve by creating static factory functions on the `class` that can create different interfaces for the `constructor`.
+2. Many programmers don't like the `class`, `new`, `constructor`, `extends`, and `super` style of object orientation. And for good reasons. Classical inheritance (`super` and `extends` is bad), it serves no real purpose and only cause pain.
+
+3. The `new` and `constructor` pattern in JS is a bit flawed:
+   1. JS doesn't allow `constructor` overloading. This means you *must* have only *one* `constructor` per class. This doesn't really fit well with the class concept in general, nor monads in particular. What *can* happen is that you end up cramming *two or more different functions* into *one constructor*, which then *can* fill your `constructor` function with super fragile, god-awful argument type and value checking, extra arguments to identify which variant of the `constructor` that you intend to call, etc.
+   2. Whenever you write `new` in your code, then the JS engine *must* create a new object. This is bad if you need to reuse objects from your own pool of objects. Put simply, you can't memoize nor reuse a `new` thing.
+   * However, there is a way out of this dilemma: `static` factory functions. You can have many factory functions (no need to cram many functions into one), and you can make the factory functions manage your pool of objects (it's fine to memoize and reuse static factory functions). `class`, `new`, `constructor`, and `static` factory functions is a viable OO pattern. 
+
+The counter argument advocating for `class` and `constructor` syntax is that they explicitly marks the *role* of the `class` in particular and clearly identify which functionality will be needed by *every* object instance created. It is a step in the direction of making JS a more statically typed langauge. And this yields *three* benefits when using the `class` and `constructor` pattern to create monads:
+
+1. Readability. Many JS developers more readily recognize the type vs instance dichotomy inherent in the monad pattern when they are presented as `class` and `constructor`. The confusion that surround the "mythical monads" in JS land might very well be traced down to the misunderstanding that monads are somehow different from other regular objects and classes in ways that they are not. (Yes, monads are *more* than just an objects and classes, but in JS they are still a subset of objects and classes that can be created just fine by using `constructor` and `class` syntax).
+
+2. Static tooling. Syntactic markers such as `class`, `constructor`, `new`, etc. make it much easier for compilers, linters, IDEs auto completion, and other static tools to aid the developer. 
    
-However, the `class` and `constructor` (with `static` factory functions when needed) explicitly marks the *role* of the construct function and clearly identify which functionality will be needed by *every* object instance created. And this yields *three* benefits when using the `class` and `constructor` pattern to create monads in JS:
+3. Performance. JS is a very dynamic language. This makes it hard for the JS engine/interpreter to recognize which code will be reused when, what memory to be allocated, which function calls can be inlined, etc. By explicitly calling a something a `class`, we help the JS engine recognize the unit of reuse and memory allocation more efficiently run-time.
 
-1. Readability. The JS developer more readily recognize the monad type and monad object as the `class` and `Object` that they are. The confusion that surround the mythical monads might very well be traced down to the misunderstanding that monads somehow are different from other regular objects and classes in ways that they are not (yes, monads and monad types are *more* than just an objects and classes, but they are still just regular objects and classes that can be created just fine by using `class` and `constructor` syntax).
+My opinion is therefore that *as a first step* on the road to understanding the "monad pattern" in JS, it is best to use `class` and `constructor` (with `static` factory functions when needed). What separates the monad and monad types from any other regular object and class types, is not the `class` and `constructor` syntax, but what comes next: the convert methods.
 
-2. Static tooling. `class` and `constructor` and `new` and other syntactic markers of role greatly assist static tooling and IDEs in assisting the developer. Code with monads benefit as much from this as any other code.
+> One might argue that this is 'mob rule': just because so many delevopers have been trained to think this way and so many tools have been made to look this way, that doesn't mean that it isn't still wrong to use `class` and `constructor`, and that we shouldn't still actively shun `class` and `constructor`. However. I think mob rule is a weak metaphor for such syntactic dilemmas. I think this problem is better understood as "grammaticalization": the slow progression of linguistic norms that evolve in *both* Darwinian and purely idiosyncratic ways. The process of grammaticalization *is already directed* by larger than life socio-historical, cultural, cognitive, and technical forces. The cognitive and technical dimension make language grammar seem as flexible as water; the cultural and socio-historical dimension make grammar seem as flexible as an ocean.
 
-3. Performance. JS is a very dynamic language. It is not easy for the JS engine/interpreter to recognize which code will be reused when, what memory to be allocated, which function calls can be inlined, etc. By explicitly demarcating what `class`es exists in our code, we not only help static tooling and developers *read* our intent, but we also help the JS engine rrecognize it and then organize our code efficiently run-time.
+## Monad convert methods
 
-In JS, I therefore have concluded that it is likely beneficial to present monad types as `class`es and create them via the `constructor` or `static` factory functions. What separates the monad and monad types from any other regular object and class types, is not the `class` and `constructor` syntax, but what comes next: the conversion methods. 
+Monad convert methods works in three steps:
 
-## Monad conversion methods
-
-Monad conversion methods works in three steps:
-
-1. create a new state using a) the state of the original monad, b) any input given to the conversion method, and c) the algorithm in the conversion method, then
+1. create a new state using a) the state of the original monad, b) any input given to the convert method, and c) the algorithm in the convert method, then
 2. wrap the new state inside a new monad object instance of the same type as the original monad (ie. an object with a different state, but with the same methods/functionality), and finally
 3. return the new monad object with the new monad state.
 
-Because the conversion method returns a monad of the same type as the original monad, such conversion methods can be **chained**. This is both very practical, and it looks good in the code using the monad. Here are two examples of how conversion methods are used, one with the native JS `Array` object and one with jQuery `$`:
+Because the convert method returns a monad of the same type as the original monad, such convert methods can be **chained**. This is both very practical, and it looks good in the code using the monad. Here are two examples of how convert methods are used, one with the native JS `Array` object and one with jQuery `$`:
 
 ```javascript
 //short, chained version
@@ -82,30 +93,44 @@ console.log(a !== b, b !== c, a !== c);
 
 #### Always a new instance?
 
-What about the edge case when a monad end up reproducing the same state as the original monad? In such a circumstance, should the monad conversion method return the same instance (itself), or should it still create a new monad instance? 
+What about the edge case when a monad end up reproducing the same state as the original monad? In such a circumstance, should the monad convert method return the same instance (itself), or should it still create a new monad instance?
 
-The answer from current practice is clear: **always new instance**. For example, `[1,2,3].filter(n => n < 10)` will produce a new array instance with the same numbers `[1,2,3]`. jQuery do the same: if there are no `h2` elements in the DOM, then `$('h1').add('h2')` will produce a new jQuery instance that happen to wrap the same set of elements as `$("h1")` do/did. But why? Why do the convert methods always produce a new instance *in JS*? 
+The answer from current practice is clear: **always new instance**. For example, `[1,2,3].filter(n => n < 10)` will produce a new array instance with the same numbers as the original array `[1,2,3]`. jQuery does the same: if there are no `h2` elements in the DOM, then `$('h1').add('h2')` will produce a new jQuery instance that happen to wrap the same set of elements as `$("h1")` did. But why? Why do the convert methods always produce a new instance *in JS*, even when no conversion is actually made?
 
-The primary reason is consistency. If a convert method sometimes returns a new monad instance and other times returns the same monad instance, then that is less consistent than when the same convert method will always return a new instance.
+The primary reason is consistency. If a convert method sometimes returns a new monad instance and other times returns the same monad instance, then that is less consistent than when the same convert method always returns a new instance.
 
 Consistency is also the second reason. If we decide to have monad convert methods return the same monad instance when it ends up with the same internal state as the original, then *all* monad convert methods should do so. And this is impractical. Some monad convert methods might fairly simply maintain a status that no change has occured. For example, it might be easy to detect that `$("h1").add("h2")` returns the same internal state when no `h2` elements are found in the DOM. However, it might be much more difficult to discover when `[0,1,2].map(n => Math.floor(Math.random()*3))` might happen to stumble upon the same state.
 
 ## Monad side-effect methods
 
-*In use* monad side-effect methods look and feel very similar to monad conversion methods. Both side-effect and conversion methods return an instance of the same monad type, and therefore both side-effect and conversion methods can be *chained*. Here is what a side-effect sequence looks like in jQuery: `$("h1").hide().css("font-size", "12px").fadeIn().animate({color: "blue"}, 10)`. Here, an initial monad `$("h1")` is then passed through four side-effect methods `.hide()`, `.css()`, `.fadeIn()`, and `.animate()` that *mutate the underlying DOM elements*. And, finally, we can even zipper the different types together into one indistinct chain: `$("h1").hide().add("h2").css("font-size", "12px").fadeIn().closest("div").animate({color: "blue"}, 10)`. 
+*In use* monad side-effect methods look and feel very similar to monad convert methods. Both side-effect and convert methods return an instance of the same monad type, and therefore both side-effect and convert methods can be *chained*. Here is what a side-effect sequence looks like in jQuery: `$("h1").hide().css("font-size", "12px").fadeIn().animate({color: "blue"}, 10)`. Here, an initial monad `$("h1")` is then passed through four side-effect methods `.hide()`, `.css()`, `.fadeIn()`, and `.animate()` that *mutate the underlying DOM elements*. And, finally, we can even zipper the different types together into one indistinct chain: `$("h1").hide().add("h2").css("font-size", "12px").fadeIn().closest("div").animate({color: "blue"}, 10)`.
 
-*Inside*, however, monad side-effect and monad conversions could not be more different: 
-1. Conversion methods *always create a new state* and monad instance and return it; side-effect methods *always mirror* return the same monad instance (itself) without any changes.
-2. Conversion methods *never mutate* any wrapped object or any other system component it can reach via its state; side-effect methods *always mutate* the wrapped objects or some other system component it can reach via the monad's inner state.
+*Inside*, however, monad side-effect and convert methods could not be more different:
+
+1. convert methods *always create a new state* and monad instance and return it; side-effect methods *always mirror* return the same monad instance (itself) without any changes.
+2. convert methods *never mutate* any wrapped object or any other system component it can reach via its state; side-effect methods *always mutate* the wrapped objects or some other system component it can reach via the monad's inner state.
+
+But a question remains, how deep does the concept of state go in the monad? Why is `.add("h2")` a state change, while `.css("font-size", "12px")` is not? After all, the elements inside the two resulting jQuery objects have changed after both? A rule of thumb to distinguish side-effects from conversions are:
+1. is it possible to have two category states active at the same time? In this system, *can* there be *two* such categories of state existing at the same time? For `.add("h2")`, the answer to that question is yes. It is not a problem for the JS engine to keep two lists of `HTMLElement`s connected to the DOM in its memory at the same time. However, for `.css("font-size", "12px")` the answer is no. Because the `$(..)` wraps `HTMLElement`s that are *connected to the DOM*, the JS engine cannot create two sets of these elements where *one* contains a different `style` property than the other.    
 
 ## Monad query methods
 
 The query methods are plain, old JS methods, but with one restriction: *no mutations*. If you are making a monad, and you need to for example reduce the set of objects inside the monad and report out the result, you must either 1) create a temporary version of the reduced set that you discard later, or 2) split your task into a convert method and then a query method.
 
-## Conclusion
+## Monad ivar-style?
 
-It can often be good to apply the constraints of the monad when you create `class` and objects. Monad is a strategy to tackle immutability, and the voluntary restrictions of the monad pattern is a good guide when making safe, scalable, reusable `class`es and objects. 
+I believe that the Monad pattern is best understood as a set of additional restrictions for `class` and object instances. I will not say that everything should be Monads, but if you feel like you *must* make a `class` for something, then it is *more than likely* that what you should make is a monad type.
+
+The practicaly list of rules for the monad pattern when you make it ivar-style in JS is:
+1. make a `class` for the monad type,
+2. don't `extend` that class, no classical inheritance, the prototype hierarchy is as flat as it can be.
+3. create monad instances using the `constructor`, but wrap the `constructor` one or more `static` factory methods on the Monad `class` before you export your monad as a library.
+4. If one of the methods on your monad makes a state change of the set of the monad, *and* the JS engine *can* hold *both* the old state and the new state in memory at the same time, then that method should be a convert method that returns a new instance of the same monad `class`. Cf. `$("h1").add("h2")`.
+5. If one of the methods on your monad makes a state change in the set of the monad, but it is impossible for the JS engine to hold both the old and the new state in memory at the same time, then this method should be a side-effect method and side-effect methods should always return the same instance as it was called on. Cf. `$("h1").css("color", "blue")`. 
+6. If your method a) do not make any state changes, and b) returns something that cannot be classified as a set in the monad `class` (ie. you cannot use the return value from the method to return a monad instance of the same type), then that is a query method.
+7. your monad `class`/objects should have no other properties than `constructor`s, `static` factory functions, convert methods, side-effect methods, and query methods.
+8. And remember, no `extends`.
 
 ## References
 
-* 
+* [Eric Elliot on OO, constructor, new, class, and extends](https://medium.com/javascript-scene/the-two-pillars-of-javascript-ee6f3281e7f3)

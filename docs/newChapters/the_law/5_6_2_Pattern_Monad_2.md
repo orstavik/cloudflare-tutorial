@@ -1,26 +1,161 @@
-# Pattern: Monad (part ii. higher-order methods)
+# Pattern: Monad ii
 
-## Monads and higher-order methods
+In Monad part i, we described a series of rules for what a monad should be. If you already know a little bit about monads, you were probably surprised that a) it didn't include higher-order functions (or methods), and b) that it still purported to define what the Monad pattern is. Let me just say, it completely surprised me too.
 
-Let's imagine that the conversion, side-effect, and query methods only accepted plain old data values. This is not a problem (yet). For example, if you wanted to convert your monad into a new monad by adding a number to all the numbers in your monad, then you would simply create a conversion method `.addToAll(number)` on your monad object, and then call it with a number. Then, if you wanted to subtract a nubmer from all, you make `subtractFromAll(number)`. Then `multiplyAllWith(number)`, `divideAllWith(number)`, etc. It works just fine, but there are suddenly lots of methods with overlapping boilerplate code. In fact, over time, your monad explodes with all the mathematical expressions imaginable.
+I will summarize the situation as follows. The "monad pattern" is actually independent of higher-order functions, but that higher-order functions first become so blatantly useful and secondly equally necessary when you create monads, that they soon appear integral to the monad pattern itself. I will now try to describe this using the conversion bonanza problem.
 
-Instead of all these `...All` methods, we could instead make *one* `.map(...)` method that iterates all the values in the state of the monad, and then performs a mathematical function on it. A function that we supply as an argument to the map function. Thus, instead of having *four* methods, we now have *one* that we can use in different ways in different contexts: `.map(add, number)`, `.map(subtract, number)`, `.map(multiply, number)`, and `.map(divide, number)`. This trick works for *both* conversion methods, side-effect methods, and query methods.
+## Problem: conversion bonanza
 
-These higher-order methods mostly **iterate** over the state content in the monad and apply either a `function` or compare the state with another similarly structured state, and with a handful of functions such as `.map`, `.filter`, `.intersect`, `.assign()` and similar, the monad is quickly able to fulfill most of its use cases. Here people start tossing their hats in the air and celebrate! It is ok to drink champagne at this point. 
-                                                                            
+First, let's imagine that monad convert methods only accept values as input. That is fine. For example, we can have a monad that is wrapped around a list of numbers, and then make a convert method that will add a number to each number in the list and return a new monad with that new list of numbers:
+
+```javascript
+class NumberMonad {
+  constructor(numbers) {
+    this.numbers = numbers;
+  }
+
+  addToAll(a) {
+    const res = [];
+    for (let b of this.numbers)
+      res.push(a + b);
+    return new NumberMonad(res);
+  }
+}
+
+const plusTwo = new NumberMonad([1, 2, 3]).addToAll(1).addToAll(1);
+```
+
+This looks fine! We have a monad `constructor` and convert method `addToAll(a)` and we can use them and chain them. Nice! We like this monad, let's give it the ability to subtract, multiply, and divide too:
+
+```javascript
+class NumberMonad {
+  constructor(numbers) {
+    this.numbers = numbers;
+  }
+
+  addToAll(a) {
+    const res = [];
+    for (let b of this.numbers)
+      res.push(a + b);
+    return new NumberMonad(res);
+  }
+
+  subtractToAll(a) {
+    const res = [];
+    for (let b of this.numbers)
+      res.push(b - a);
+    return new NumberMonad(res);
+  }
+
+  multiplyToAll(a) {
+    const res = [];
+    for (let b of this.numbers)
+      res.push(a * b);
+    return new NumberMonad(res);
+  }
+
+  divideToAll(a) {
+    const res = [];
+    for (let b of this.numbers)
+      res.push(b / a);
+    return new NumberMonad(res);
+  }
+}
+
+const plusTwoMinusOneTimesFiveDivide4 = new NumberMonad([1, 2, 3]).addToAll(2).subtractToAll(1).multiplyToAll(5).divideToAll(4);
+```
+
+Ok. It works. But we are starting to see some problems:
+
+1. The code has bloated. This simple object is now 30 lines of more or less boilerplate code. And we see clearly, this is just the beginning.
+2. The code is inefficient. We must iterate the entire list for each operation; we cannot apply all the mathematical expressions at each element before moving on to the next.
+
+To fix these problems, we (abruptly) decide to use another pattern: higher-order functions. In JS `function`s are first class citizens. That means that we can send them around as arguments, and that the monad convert methods can use functions passed from the outside however they wish inside.
+
+## Monads higher-order methods
+
+So, what do the four convert methods above have in common? Well, they all **iterate** over the list of numbers inside the monad and then apply a mathematical operation to each number. So, what if we created *one* convert method `.map(...)` that took one argument `aMathematicalFunction`, and then applied that function to each number? We then have:
+
+1. the monad convert method iterates,
+2. the monad convert method selects passes the relevant arguments from its state,
+3. into an externally provided, abstract function,
+4. that produce an output that it returns to the monad,
+5. that the monad convert method then uses to create a new state
+6. that it returns as a new monad instance.
+
+```javascript
+class NumberMonad {
+  constructor(numbers) {
+    this.numbers = numbers;
+  }
+
+  map(aMathematicalFunction) {
+    const res = [];
+    for (let b of this.numbers)
+      res.push(aMathematicalFunction(b));
+    return new NumberMonad(res);
+  }
+}
+
+function plus2(n) {
+  return n + 2;
+}
+
+function minus1(n) {
+  return n - 1;
+}
+
+function times5(n) {
+  return n * 5;
+}
+
+function divideBy4(n) {
+  return n / 4;
+}
+
+const plusTwoMinusOneTimesFiveDivide4 = new NumberMonad([1, 2, 3]).map(plus2).map(minus1).map(times5).map(divideBy4);
+```
+
+The next step then becomes to better organize our code from the outside:
+
+```javascript
+class NumberMonad {
+  constructor(numbers) {
+    this.numbers = numbers;
+  }
+
+  map(aMathematicalFunction) {
+    const res = [];
+    for (let b of this.numbers)
+      res.push(aMathematicalFunction(b));
+    return new NumberMonad(res);
+  }
+}
+
+function plus2minus1times5divideBy4(n) {
+  return (((n + 2) - 1) * 5) / 4;
+}
+
+const array2 = new NumberMonad([1, 2, 3]).map(plus2minus1times5divideBy4);
+//or just .map(n => (((n + 2) - 1) * 5) / 4); 
+```
+          
+ToDo
+
+
+iterates all the values in the state of the monad, and then performs a mathematical function on it. A function that we supply as an argument to the map function. Thus, instead of having *four* methods, we now have *one* that we can use in different ways in different contexts: `.map(add, number)`, `.map(subtract, number)`, `.map(multiply, number)`, and `.map(divide, number)`. This trick works for *both* conversion methods, side-effect methods, and query methods.
+
+These higher-order methods mostly **iterate** over the state content in the monad and apply either a `function` or compare the state with another similarly structured state, and with a handful of functions such as `.map`, `.filter`, `.intersect`, `.assign()` and similar, the monad is quickly able to fulfill most of its use cases. Here people start tossing their hats in the air and celebrate! It is ok to drink champagne at this point.
+
 ## Monad limitations
 
 However, there are limitations with monads too. There are drawbacks. There are reasons why we don't always use them.
 
 1. Monad conversions are split in two. Instead of simply formulating a `for` loop and then do our action inside that `for` loop, we must now 1) choose a higher-order method on the monad that will do the appropriate loop combination for us, 2) pass the action we desire into that method as an abstract function (where we must imagine which values the monad's higher-order function will pass as arguments to our abstract function). Regular imperative programming is also abstract, but monads are slightly more abstract.
 
-2. The higher-order methods on the monad *controls* the flow of control of the conversion, side-effect, and query methods. This means that all the `if/else`, `for/while`, `try/catch` are declared inside the monads' methods. And thus, if we want to change/adapt these control structures we must add new methods to our monad. This doesn't happen as often as one might think: the generic `.map()`, `.filter()`, `.assign()` and `.reduce()` methods can cover a lot of ground. However, shortcomings in the monads generic control structures also happens more frequently than one might think: you don't have to use jQuery for long before you realize that a) you must/benefit from doing things outside jQuery, and b) do I really need jQuery in the first place? Isn't it just as well to do stuff with regular `for`-loops and my own `DOMNode` arrays?  
-
-
+2. The higher-order methods on the monad *controls* the flow of control of the conversion, side-effect, and query methods. This means that all the `if/else`, `for/while`, `try/catch` are declared inside the monads' methods. And thus, if we want to change/adapt these control structures we must add new methods to our monad. This doesn't happen as often as one might think: the generic `.map()`, `.filter()`, `.assign()` and `.reduce()` methods can cover a lot of ground. However, shortcomings in the monads generic control structures also happens more frequently than one might think: you don't have to use jQuery for long before you realize that a) you must/benefit from doing things outside jQuery, and b) do I really need jQuery in the first place? Isn't it just as well to do stuff with regular `for`-loops and my own `DOMNode` arrays?
 
 > The monad conversion functions look at the state of the monad object, and then calculate a new state. For example, lets say you have a monad wrapped around an array of numbers. This monad (object) has a function called `.half()` on it. This `.half()` function could for example make a new array and fill it with numbers half the value of the original monads array. Or, the `.half()` function could make a new monad with an array half the size of the original monad's array, for example the first half, the second half, or every other number. It is up to the monad and the monad conversion functions to decide *how* it should transform the state of the monad into a new state. When you make a monad, you can make all the specialized monad conversion functions you would like.
-
-
 
 ## Old draft...
 
