@@ -128,7 +128,7 @@ The practicaly list of rules for the monad pattern when you make it ivar-style i
 4. If one of the methods on your monad makes a state change of the set of the monad, *and* the JS engine *can* hold *both* the old state and the new state in memory at the same time, then that method should be a convert method that returns a new instance of the same monad `class`. Cf. `$("h1").add("h2")`.
 5. If one of the methods on your monad makes a state change in the set of the monad, but it is impossible for the JS engine to hold both the old and the new state in memory at the same time, then this method should be a side-effect method and side-effect methods should always return the same instance as it was called on. Cf. `$("h1").css("color", "blue")`. 
 6. If your method a) do not make any state changes, and b) returns something that cannot be classified as a set in the monad `class` (ie. you cannot use the return value from the method to return a monad instance of the same type), then that is a query method.
-7. your monad `class`/objects should have no other properties than `constructor`s, `static` factory functions, convert methods, side-effect methods, and query methods.
+7. your monad `class`/objects should have no other properties than `constructor`s, `static` factory functions, convert methods, side-effect methods, and query methods. JS native Arrays break this rule by adding mutating methods such as push() and pop(), and that is why Arrays are not really a monad, but a type that has many monadic methods (.map(),filter()) and *could have been* a proper monad. 
 8. And remember, no `extends`.
 
 ## References
