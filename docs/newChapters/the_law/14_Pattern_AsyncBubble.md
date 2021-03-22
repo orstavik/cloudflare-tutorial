@@ -45,7 +45,7 @@ This results in *two* variants of the AsyncBubble: an EventAsyncBubble and Promi
 #### EventAsyncBubble
 
 ```javascript
-;(async function () {
+(async function () {
   try {
     //await something and
     //other async code here
