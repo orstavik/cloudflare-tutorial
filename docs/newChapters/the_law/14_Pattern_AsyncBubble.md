@@ -45,13 +45,13 @@ This results in *two* variants of the AsyncBubble: an EventAsyncBubble and Promi
 #### EventAsyncBubble
 
 ```javascript
-;(async function () {
+(async function () {
   try {
     //await something and
     //other async code here
-    const event = new Event('my-custom-event-type');
+    const eventWithData = new Event('my-custom-event-type');
     event.data = 'the data the AsyncBubble creates';
-    dispatchEvent(eventWithData);
+    EventTarget.dispatchEvent(eventWithData);
   } catch (err) {
     console.error("AsyncBubble failed:", err);
   }
@@ -135,7 +135,7 @@ addEventListener('update', function (e) {
     const derivativeOfSomething = await fetch(something);
     const event = new Event('some-event');
     event.data = derivativeOfSomething;
-    dispatchEvent(event);
+    EventTarget.dispatchEvent(event);
   })();
 });
 
@@ -146,7 +146,7 @@ addEventListener('some-event', function (e) {
     const derivateOfderivative = await fetch(derivativeOfSomething);
     const event = new Event('some-other-event');
     event.data = derivateOfderivative;
-    dispatchEvent(event);
+    EventTarget.dispatchEvent(event);
   })();
 });
 
