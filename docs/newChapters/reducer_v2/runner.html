@@ -1,0 +1,122 @@
+<script type="module">
+  import {handleResponse, stateMachine} from "./ResponseRace.js";
+  import {compile} from "./compiler.js";
+
+  function debug(frame) {
+    frame.functions = window.functions;
+    console.log(frame)
+    const msg = frameToString(frame);
+    window.parent.postMessage(msg, '*');
+  }
+
+  function minimizeTraceList(trace) {
+    let prev;
+    let res = [];
+    for (let t of trace) {
+      if (prev && prev[0] === t[0])
+        prev[1] += t[1];
+      else
+        res.push(prev = [...t]);
+    }
+    return res;
+  }
+
+  function frameToString({actions, functions, state: context, trace}) {
+    trace = minimizeTraceList(trace);
+    trace = trace.map(([id, txt]) => [id, txt.replace('E', 'eb').replace('O', 'ob')]);  //todo this is not so good.
+
+    trace = trace.map(idTxt => ':' + idTxt.join('_')).join('');
+    actions = actions.map(([id, params, fun, output, error]) => [params.map(p => p instanceof Object ? p.op + p.key : typeof (p) === 'string' ? JSON.stringify(p) : p), fun.name, output, error]);
+    const state = {};
+    for (let key in context)
+      state[key] = context[key] === undefined ? null : context[key];
+    return btoa(JSON.stringify({actions, functions, trace, state}));
+  }
+
+  let previous;
+
+  function checkMutations(frame) {
+    if (!previous) {
+      previous = {};
+      frame.state._mutations = {};
+      for (let key in frame.state)
+        previous[key] = JSON.stringify(frame.state[key]);
+      return;
+    }
+    const res = {}, diff = [];
+    for (let key in frame.state) {
+      res[key] = JSON.stringify(frame.state[key]);
+      previous[key] !== res[key] && (diff.push([key, previous[key], res[key]]));
+    }
+    previous = res;
+    //a mutation is marked as an unknown action: `:_Mi`. Analysis must be done to highlight potential sinners.. If there are more than one async function and one of the async functions return, then the culprit action might be one of the async actions running.
+    // todo untested
+    if (diff.length > 1) {
+      const i = Object.keys(frame.state._mutations).length;
+      frame.state._mutations[i] = diff;
+      frame.sequence += ':_M' + i;
+    }
+    return diff;
+  }
+
+  window.debug = debug;
+  window.checkMutations = checkMutations;
+
+  //adding mock methods for the fetch event
+  addEventListener('fetch', e => {
+    e.passThroughOnException = () => console.log('passThroughOnException.');
+    e.waitUntil = async data => console.log('waitUntil: ', await data);
+    e.respondWith = async data => console.log('respondWith: ', await data);
+
+    const {response, observer} = stateMachine(window.actions, e.state, window.tracers);
+    handleResponse(e, response, observer);
+  });
+
+  async function loadFunctions(functions) {
+    const res = {};
+    for (let rawkey in functions) {
+      const importUrl = functions[rawkey];
+      let declarations = await import(importUrl.replaceAll('\\\n', '\n').replaceAll('\"', '"'));
+      for (let key of JSON.parse(rawkey))
+        res[key] = declarations[key];
+    }
+    return res;
+  }
+
+  function linkFunctionState(state, functions) {
+    if (!state._functions)
+      return;
+    for (let funName in state._functions) {
+      if (!(funName in functions))
+        continue;                              //setting test values on a function that is not loaded.
+      const funSettings = state._functions[funName];
+      for (let [setting, startValue] of Object.entries(funSettings)) {
+        startValue !== undefined && (functions[funName][setting] = startValue);
+        state._functions[funName][setting] = functions[funName][setting];
+      }
+    }
+  }
+
+  (async function init() {
+    let {functions, actions, state} = JSON.parse(atob(location.hash.substr(1)));
+    window.functions = functions;
+    const declarations = await loadFunctions(functions);
+    actions = compile(actions);
+    actions.forEach(action => action[2] = declarations[action[2]]);  //link up functions in actions
+    window.actions = actions;
+
+    //update environment the settings.
+    linkFunctionState(state, declarations);
+    const cbs = [];
+    state?.env?._debug && cbs.push(debug);
+    state?.env?._mutationCheck && cbs.push(checkMutations);
+    const cb = (frame)=>cbs.forEach(fun=>fun(frame));
+    window.tracers = {
+      'i': cb,
+      'e': cb,
+      'o': cb
+    };
+
+    dispatchEvent(Object.assign(new Event('fetch'), {state}));
+  })();
+</script>

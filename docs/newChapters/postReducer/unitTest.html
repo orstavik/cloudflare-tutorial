@@ -1,0 +1,21 @@
+<script>
+
+  function automaticUnitTest(unitTestFunction, fun, functionIdentity){
+    return function(...args){
+      const input = JSON.stringify(args);
+      const res = fun(...args);
+      if(res instanceof Promise){
+        res.then(res2=>{
+          const output = JSON.stringify(res2);
+          unitTestFunction(input, functionIdentity, output);
+        });
+      } else{
+        const output = JSON.stringify(res);
+        unitTestFunction(input, functionIdentity, output);
+      }
+      return res;
+    }
+  }
+
+
+</script>

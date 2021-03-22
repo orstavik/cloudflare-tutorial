@@ -1,0 +1,126 @@
+<style>
+  #controls {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    border: 2px solid lightslategray;
+    background: white;
+    padding: .5em .5em .5em 1.5em;
+  }
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  summary {
+    height: 1em;
+    width: 100%;
+  }
+  details[open] {
+    width: 100%;
+    height: calc(100vh - 2em);
+  }
+  iframe:not(#runner) {
+    width: 100%;
+    height: calc(100% - 2em);
+  }
+</style>
+
+<ul id="controls">
+  <li>Debug in devtools: <input id="debug" type="checkbox"></li>
+  <li>Check for state mutations during actions: <input id="mutations" type="checkbox"></li>
+  <li><button id="run">Run!</button></li>
+</ul>
+<details>
+  <summary>Input data</summary>
+  <iframe src="" frameborder="0" id="state"></iframe>
+</details>
+<details>
+  <summary id="editorHeader">Editor.</summary>
+  <iframe src="" frameborder="0" id="editor"></iframe>
+</details>
+<iframe id="runner" hidden></iframe>
+<details open>
+  <summary>View debugger</summary>
+  <iframe id="viewer" src=""></iframe>
+</details>
+
+<script>
+  function hashchange() {
+    try {
+      const data = location.hash.substr(1);
+      console.log(data)
+      const obj = JSON.parse(atob(data));
+      console.log(obj);
+      const {actions, functions, trace, state} = obj;
+      window.actions = actions || window.actions;
+      window.functions = functions || window.functions;
+      window.trace = trace || window.trace;
+      window.state = state || window.trace;
+
+      document.querySelector("#debug").checked = !!state?.env?._debug;
+      document.querySelector("#mutations").checked = !!state?.env?._mutationCheck;
+
+      document.querySelector("#state").src = 'stateView.html#' + data;
+      document.querySelector("#editor").src = 'textView.html#' + data;
+      document.querySelector("#viewer").src = 'debug.html#' + data;
+    } catch (err) {
+      console.error('render failed: ' + err);
+    }
+  }
+
+  addEventListener('hashchange', hashchange);
+
+  function updateHash() {
+    window.state.env._debug = document.querySelector("#debug").checked;
+    window.state.env._mutationCheck = document.querySelector("#mutations").checked;
+    const data = {actions: window.actions, functions: window.functions, state, trace: window.trace};
+    const hash = btoa(JSON.stringify(data));
+    location.hash = "#" + hash;
+  }
+  addEventListener('change', updateHash, true);
+
+  document.querySelector("#run").addEventListener('click', function () {
+    document.querySelector('#runner').src = '';
+    document.querySelector('#runner').src = 'runner.html' + location.hash;
+  });
+
+  addEventListener('message', e => location.hash = '#' + e.data);
+
+  window.onload = async function () {
+    const tsts = await (await fetch('tests.json')).json();
+    const editor = document.querySelector("#controls");
+    for (let [name, hash] of Object.entries(tsts)) {
+      const a = document.createElement('a');
+      a.href = '#' + hash;
+      a.innerText = name;
+      const li = document.createElement('li');
+      li.appendChild(a);
+      editor.appendChild(li);
+    }
+    hashchange();
+  }
+</script>
+
+<pre hidden>
+    //todo only encrypting all the functions in one big bite here..
+  //todo should make these entries individual per function to much better support automatic unit tests.
+  //todo and ml
+  //todo and smart ide that might based on a series of unit tests suggest functions that you can replace your functions with.
+
+
+  todo the purpose of the reducer pattern is to make the logic more declarative.
+
+e is the state, but because it is async, we must decorate the state, and not replace it.
+reducer is a pure(-ish) function. It can get data from outside, and it can use only the data in the incoming state.
+errors needs to be masked on a reducer/reducer basis.
+
+the properties of the context object is *both* a property *and* a state marker at the same time.
+the property is both a point in space and a point in time.
+
+when more than one promise leads to a property, then first come first serve.
+This way, reducers can race to reach a point in space/time, and only the first reducer will fill the space/win the race.
+a reducer will not start until all its marked dependencies are fulfilled.
+
+This is a time/machine, as much as it is a state.
+</pre>

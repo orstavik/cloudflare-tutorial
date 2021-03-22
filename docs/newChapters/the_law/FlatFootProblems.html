@@ -1,0 +1,113 @@
+# problem: flatFoot combinators
+
+The problem:
+
+It is clear that with the current setup of combinators, the first reference to functions outside the scope of the function where the combinator is declared (such as a recursive call) will NOT BE TRIGGERED. That makes it a FlatFootCombinator. Which might be a good thing, it might be what we want in the iterative world..
+
+
+1. Recursion
+Exponent as math. How the memoize only apply to the first call. How we need to change memoize and the exponent function to make it work recursively. (the mockingbird).
+Why js can't do this. It hasn't tco. And the expense of wrapping every function call in more than one function (minimum is twice as expensive). And the memory of all the memoize! You can't memoize all the stuff, and if you write a report, such a long list would be minimized anyway.
+Explore the paths all the way to Y combinator. Mostly for my own learning.
+
+
+<script>
+
+  function observe(...originals) {
+    return originals.map(original => {
+      return function regulator(...args) {
+        console.log(original.name, ...args);
+        return original(...args);
+      }
+    });
+  }
+
+  //1. simulate accessing functions created in another scope
+  var [goBananas, goGorillas, goJungle] = (function () {
+    function goBananas() {
+      return "bananas";
+    }
+
+    function goGorillas() {
+      return "gorillas";
+    }
+
+    function goJungle() {
+      return [goGorillas(), goBananas()];
+    }
+
+    return [goBananas, goGorillas, goJungle];
+  })();
+
+  [goGorillas, goBananas, goJungle] = observe(goGorillas, goBananas, goJungle);
+  goJungle();
+  //"goJungle"
+  //only prints the top most function, as the encapsulated ones are hidden inside the
+
+  //2. simulate accessing functions created in the same scope
+  function goIce() {
+    return "ice";
+  }
+
+  function goPolarBears() {
+    return "polar bears";
+  }
+
+  function goNorthPole() {
+    return [goIce(), goPolarBears()];
+  }
+
+  [goIce, goPolarBears, goNorthPole] = observe(goIce, goPolarBears, goNorthPole);
+  goNorthPole();
+  //goNorthPole
+  //goIce
+  //goPolarBears
+  //access all three because we mess up and manipulate variables pointing to functions in the same scope.
+  //this is not a technique, this is a mess.
+
+  //3. simulate accessing recursive functions (in the same scope mess)
+  var powa = function (a, b) {
+    if (b > 0) return a * powa(a, b - 1);
+    if (b === 0) return 1;
+    throw new Error('we are strictly positive, forced smiles upon all faces!');
+  };
+
+  [powa] = observe(powa);
+  console.log(powa(2, 5));
+  //prints
+  //powa 2 5
+  //powa 2 4
+  //powa 2 3
+  //powa 2 2
+  //powa 2 1
+  //powa 2 0
+  //32
+
+  //4. recursive functions defined in a different scope
+  let powb = (function () {
+
+    function powb(a, b) {
+      if (b > 0) return a * powb(a, b - 1);
+      if (b === 0) return 1;
+      throw new Error('we are strictly positive, forced smiles upon all faces!');
+    }
+
+    return powb;
+  })();
+
+  [powb] = observe(powb);
+  console.log(powb(2, 5));
+  //prints
+  //powb 2 5
+  //32
+
+</script>
+
+
+https://raganwald.com/2018/09/10/why-y.html
+
+Another good article. The name for our funfunfun is... Combinator. And. As this article illustrates, our regulators doesn't work when they call themselves recursively (or when some other function call them recursively). That is the problem with our regulators... That is why they implement the mocking bird (which in turn leads to the y bird/y combinator).. And this i don't fully understand yet.
+
+I think that the problem with the mockingbird is that it require us to implement the functions with the function itself as the first argument. And then the y bird comes in and adds an abstraction that makes that unnecessary.
+
+https://en.m.wikipedia.org/wiki/Combinatory_logic#:~:text=A%20combinator%20is%20a%20higher,a%20result%20from%20its%20arguments.

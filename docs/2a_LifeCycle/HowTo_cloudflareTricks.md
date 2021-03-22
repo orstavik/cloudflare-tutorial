@@ -1,22 +1,4 @@
 # cloudflare tricks
-
-## see all the headers
-
-see all the cloudflare headers! [https://cloudflareworkers.com/?&_ga=2.225834073.2138029206.1602683608-1010365947.1600154718#1397c93ebb1d69a989d6d0357160c9c2:https://tutorial.cloudflareworkers.com](https://cloudflareworkers.com/?&_ga=2.225834073.2138029206.1602683608-1010365947.1600154718#1397c93ebb1d69a989d6d0357160c9c2:https://tutorial.cloudflareworkers.com).
-
-```javascript
-addEventListener('fetch', event => event.respondWith(handleRequest(event.request)));
-
-async function handleRequest(request) {
-  let result = 'url: ' + request.url + '\n';
-  for (const header of request.headers) {
-    result += 'header: ' + header + '\n';
-  }
-  const referer = new URL(request.headers.get('referer')).origin;
-  console.log(referer);
-  return new Response(result);
-}
-```
         
 ## analyze the cf-request-id and cf-ray
 

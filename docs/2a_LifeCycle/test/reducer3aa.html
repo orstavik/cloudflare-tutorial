@@ -1,0 +1,120 @@
+//todo the purpose of the reducer pattern is to make the logic more declarative.
+
+//e is the state, but because it is async, we must decorate the state, and not replace it.
+//reducer is a pure(-ish) function. It can get data from outside, and it can use only the data in the incoming state.
+//errors needs to be masked on a reducer/reducer basis.
+
+//the properties of the context object is *both* a property *and* a state marker at the same time.
+//the property is both a point in space and a point in time.
+
+//when more than one promise leads to a property, then first come first serve.
+//This way, reducers can race to reach a point in space/time, and only the first reducer will fill the space/win the race.
+//a reducer will not start until all its marked dependencies are fulfilled.
+
+//This is a time/machine, as much as it is a state.
+<script>
+  //1. the asyncErrorRace with dependency support
+  function asyncErrorRace(deps, fun, ...args) {
+    let resCb, errCb, success = new Promise(r => resCb = r), error = new Promise(r => errCb = r);
+    Promise.allSettled(deps).then(() => {
+      try {
+        const res = fun(...args);
+        res instanceof Promise ? res.then(r => resCb(r), e => errCb(e)) : resCb(res);
+      } catch (err) {
+        errCb(err);
+      }
+    });
+    return {success, error};
+  }
+
+  //2. getPromise with resolver (or the existing resolver for an already created Promise)
+  const promiseToResolver = new WeakMap();
+
+  function getPromiseResolver(promise) {
+    if (promise)
+      return [promise, promiseToResolver.get(promise)];
+    let resolver;
+    promise = new Promise(r => resolver = r);
+    promiseToResolver.set(promise, resolver);
+    return [promise, resolver];
+  }
+
+  //3. we need a race style promise that can be triggered from many different directions, and
+  // that will that will also turn itself into the result on the context object.
+  function selfResolvingPromise(context, prop, triggerPromise) {
+    const [promise, resolver] = getPromiseResolver(context[prop]);
+    context[prop] = promise;
+    triggerPromise.then(v => context[prop] instanceof Promise && (resolver(v), context[prop] = v));
+  }
+
+  //4. finally the reducer.
+  async function reducerMachine(e) {
+    for (let [deps, reducer, prop, propError] of listOfReducers) {
+      deps = deps.map(d => e[d]);
+      const {success, error} = asyncErrorRace(deps, reducer, e);
+      !prop && !propError && e.waitUntil(Promise.race([success, error]));      //observers
+      prop && selfResolvingPromise(e, prop, success);
+      propError && selfResolvingPromise(e, propError, error);
+    }
+    return (await e.response).clone();
+    //the response returned will be used up, and so it is not possible to use in a log.
+    //by cloning the `response`, the original state can still be observed by others.
+    //todo the e.response should maybe be a getter method, so that every time somebody asks for e.response, it gets cloned?
+  }
+
+  function maybeError(e) {
+    if (new URL(e.request.url).pathname === '/error')
+      throw new SyntaxError('bobsibob');
+    return 'world';
+  }
+
+  function maybeErrorHandler(e) {
+    // await e.maybeError;                                             //todo await maybeError
+    //must remember to await the maybeError prop, even though we do not use it.
+    //This is counter common js practices and use of the async/await syntax.
+    //   It will work, but it is unconventional to just waits as explicitly as here stated.
+    const replace = new Error('this is a public hello world error message.');
+    replace.status = 403;
+    return replace
+  }
+
+  function errorToResult(e) {
+    // const error = await e.error;                                    //todo await error
+    return new Response(e.error.toString() + '\nLog: ' + undefined, {status: e.error.status || 404});
+  }
+
+  async function helloSunshine(e) {
+    await new Promise(r => setTimeout(r, 10));
+    return new Response('hello sunshine');
+  }
+
+  async function log(e) {
+    // const response = await e.response;                              //todo await response
+    const clone = e.response.clone();
+    await new Promise(r => setTimeout(r, 1000));
+    console.log('logging later ' + clone.status + (e.world instanceof Promise ? undefined : e.world));
+    // fetch('log', data);
+  }
+
+  const listOfReducers = [
+    [[], maybeError, 'hello', 'maybeError'],                     //todo hello is not used, did you forget it as a dependency, or is this something that you are only using in an observer capacity (in which case you can skip the success property/undefined/falsy it
+    [['maybeError'], maybeErrorHandler, 'error'],          //todo typo, we should print out a list of possible paths to .response.
+
+    [[], helloSunshine, 'response', 'error'],              //todo sort the process
+
+    [['error'], errorToResult, 'response'],
+
+    [['response'], log],  //observers are marked by no return, will implement e.waitUntil in the reducerMachine
+  ];
+
+  // addEventListener('fetch', e => e.respondWith(reducerMachine(e, listOfReducers)));
+  window.url = 'https://vg.no/error';
+  window.addEventListener('click', async function () {
+    const e = {
+      request: {url: url}, waitUntil: function () {
+      }
+    };
+    console.log(await (await reducerMachine(e, listOfReducers)).text());
+  });
+
+</script>

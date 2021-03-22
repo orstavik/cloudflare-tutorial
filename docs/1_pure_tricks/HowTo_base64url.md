@@ -1,10 +1,12 @@
 # HowTo: base64url
 
-base64 is a handy format for taking binary text strings and encoding them into a smaller text format safe to be transported and positioned elsewhere. But. It turns out that base64 is not 100% safe either. It turns out that base64 is using `+` and `/` and `=` which are not safe to be used in urls. Therefore, we would like to convert base64 into an even safer text format: base64url.
+## WhatIs: base64, `btoa(txt)` and `atob(b64txt)`?
 
-## `toBase64url(base64str)` and `fromBase64url(base64urlStr)` 
+`base64` is a text format that only allow the following 64 characters: `A-Za-z0-9+=/`. It is used for converting text that contain whitespace and strange characters into a format that is easy to transport and store. The pure function `btoa(txt)` converts **b**inary string into an **a**scii/base64 string, and `atob(b64str)` works in the other direction.
 
-base64url is the same as base64, except that +=>-, /=>_, and the padding (ie. the trailing `=` and `==`) are removed. Yes. It is that simple.
+## What is: base64url?
+
+But. There is one annoyance with base64: it uses the characters `+`, `/` and `=`. And these characters are not safe to use in a url. Thus, to make a piece of text safe to transport as part of a url, we must replace all the `+`, `/` and `=` with `-`, `_` and ``. We do this with two pure functions: `toBase64url(base64str)` and `fromBase64url(base64urlStr)`. 
 
 ```javascript
 function toBase64url(base64str) {
@@ -22,7 +24,7 @@ function fromBase64url(base64urlStr) {
 ```
 
 There are two things to make note of:
-1. there is not really a need to include the padding `=` at the end of base64 strings. The need to have padding can be calculated based on the length of the base64 string. Therefore, base64url simply removes the `=` at the end of the base64 strings, and then reapply them based on the length of the base64url string.
+1. The trailing `=` and `==` are used as padding to ensure that base64 strings are always 4, 8, 12, 16, 20 etc. characters long. When we convert base64 into base64url, we can therefore simply remove `=`, and when we convert base64url into base64, we therefore just add `=` at the end of the result until the string length `%4` is `0`. 
 2.  when converting a 'normal' string into base64url (via base64), the base64 function is applied *BEFORE* the base64url when the string is encoded, and *AFTER* the base64url function when the string is decoded.
 
 ## Demo
@@ -60,4 +62,5 @@ console.log(str2);
 
 ## References:
 
- * 
+* [MDN: atob()](https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/atob)
+* [MDN: btoa()](https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/btoa)

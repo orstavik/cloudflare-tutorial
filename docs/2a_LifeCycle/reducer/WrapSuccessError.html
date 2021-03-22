@@ -1,0 +1,151 @@
+Basically the wrapSuccessError will:
+1. take in both async/sync functions, with arguments,
+2. invoke it, and
+3. return an object {success, error} with the result.
+
+<script>
+  "use strict";
+  //2. the asyncErrorRace with dependency support
+  const neverEnds = new Promise(r => r);
+
+  //removes *-prefix and turns all (pending) Promises into undefined
+  // (a normal object will be able to hold Promises, but a firstWinsObject will only hold pending Promises.)
+  function getArgsRightNow(state, args) {
+    return args.map(arg => (arg = state[arg[0] === '*' ? arg.substr(1) : arg], arg instanceof Promise ? undefined : arg));
+  }
+
+  /**
+   * @param state<Object> The object which contains the arguments
+   * @param args<Array: string> the properties on the object which must be resolved,
+   *        all args prefixed with "*" are skipped.
+   * @returns {Promise|boolean}
+   *          true if all the arguments are resolved,
+   *          otherwise a Promise when all the arguments are resolved
+   */
+  function argsReady(state, args) {
+    const awaitArgs = args.filter(arg => arg[0] !== '*').map(arg => state[arg]).filter(arg => arg instanceof Promise);
+    return awaitArgs.length ? Promise.allSettled(awaitArgs) : true;
+  }
+
+  function syncInvokefun(fun, state, args) {
+    try {
+      const argsRightNow = getArgsRightNow(state, args);
+      const res = fun(...argsRightNow);
+      if (!(res instanceof Promise))
+        return {success: res, error: neverEnds};
+      let resCb, errCb;
+      const success = new Promise(r => resCb = r), error = new Promise(r => errCb = r);
+      res.then(r => resCb(r), e => errCb(e));
+      return {success, error};
+    } catch (err) {
+      return {success: neverEnds, error: err};
+    }
+  }
+
+  function asyncInvokeFun(ready, fun, state, args) {
+    let resCb, errCb;
+    const success = new Promise(r => resCb = r), error = new Promise(r => errCb = r);
+    ready.then(() => {
+      try {
+        const argsRightNow = getArgsRightNow(state, args);
+        const res = fun(...argsRightNow);
+        res instanceof Promise ? res.then(r => resCb(r), e => errCb(e)) : resCb(res);
+      } catch (err) {
+        errCb(err);
+      }
+    });
+    return {success, error};
+  }
+
+  function wrapSuccessError(fun, state, args) {
+    const ready = argsReady(state, args);
+    return ready === true ? syncInvokefun(fun, state, args) : asyncInvokeFun(ready, fun, state, args);
+  }
+</script>
+
+The asyncErrorRace will run any function against a given list of arguments.
+The function receives its arguments as an object with an array of string properties.
+
+<script type="module">
+  (async function () {
+    const a = wrapSuccessError(
+      hello => 'hello ' + hello,
+      {hello: 'sunshine'},
+      ['hello']
+    );
+    const b = wrapSuccessError(
+      hello => 'hello ' + hello,
+      {hello: 'sunshine', waitForIt: new Promise(r => setTimeout(r, 100))},
+      ['hello', 'waitForIt']);
+    console.log(a.success === 'hello sunshine');
+    console.log(b.success instanceof Promise)
+    console.log(await b.success === 'hello sunshine');
+  })();
+</script>
+
+The function returns an object with {success, error} values.
+* If an error is thrown during the execution, then the error value will be populated.
+* If no error occurs during the execution, then the success value will be filled.
+
+<script type="module">
+  (async function () {
+    const a = wrapSuccessError(
+      hello => {throw new Error('error rain')},
+      {hello: 'sunshine'},
+      ['hello']
+    );
+    const b = wrapSuccessError(
+      hello => {throw new Error('error rain')},
+      {hello: 'sunshine', waitForIt: new Promise(r => setTimeout(r, 100))},
+      ['hello', 'waitForIt']);
+    console.log(a.success instanceof Promise);
+    console.log(a.error.message === 'error rain');
+    console.log(b.success instanceof Promise)
+    console.log(b.error instanceof Promise)
+    console.log((await b.error).message === 'error rain');
+  })();
+</script>
+
+The asyncErrorRace can also run async functions.
+If the function returns a Promise, then when that Promise resolves, it will resolve the {success} value, and
+if that Promise fails, it will resolve the {error} value.
+
+
+<script type="module">
+  (async function () {
+    const a = wrapSuccessError(
+      async hello => {await new Promise(r=>setTimeout(r, 100)); return 'hello ' + hello},
+      {hello: 'sunshine'},
+      ['hello']
+    );
+    const b = wrapSuccessError(
+      async hello => {await new Promise(r=>setTimeout(r, 100)); throw new Error('error rain')},
+      {hello: 'sunshine', waitForIt: new Promise(r => setTimeout(r, 100))},
+      ['hello', 'waitForIt']);
+    console.log(a.success instanceof Promise, a.error instanceof Promise);
+    console.log(b.success instanceof Promise, b.error instanceof Promise);
+    const aSuccess = await a.success;
+    console.log(aSuccess === 'hello sunshine');
+    const bError = await b.error;
+    console.log(bError.message === 'error rain');
+  })();
+</script>
+
+The function will not run until all arguments are resolved
+* To allow a function to run even though one or more arguments are not resolved,
+mark the optional arguments with a '*' prefix.
+
+If none of the arguments given in are Promises, the function will run sync/immediately.
+
+<script type="module">
+  (async function () {
+    const b = wrapSuccessError(
+      (hello, waitForIt) => 'hello ' + hello + waitForIt,
+      {hello: 'sunshine', waitForIt: new Promise(r => setTimeout(r, 100))},
+      ['hello', '*waitForIt']);
+    console.log(b.success === 'hello sunshineundefined');
+  })();
+</script>
+
+
+

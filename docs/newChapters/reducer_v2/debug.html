@@ -1,0 +1,366 @@
+<style>
+  * {
+    margin: 0; padding: 0; box-sizing: border-box;
+  }
+
+  #calls {
+    position: absolute;
+    top: 0;
+    left: calc(var(--unit) * 0.25);
+  }
+  #calls li {
+    display: inline;
+    padding: 0 0 1em 0.2em;
+    --color1: transparent;
+    --color2: transparent;
+    text-decoration: underline var(--color1);
+    border-right: 2px solid var(--color2);
+    border-bottom: 1px solid var(--color2);
+    border-left: 1px solid lightgray;
+  }
+  #calls li[current] {
+    font-weight: bold;
+    background: black;
+    color: white;
+  }
+  #calls li[status*="o"]:not([status*="b"]) {
+    --color1: green;
+  }
+  #calls li[status*="e"]:not([status*="b"]) {
+    --color1: orange;
+  }
+  #calls li[status*="c"] {
+    --color1: black;
+  }
+  #calls li[status*="b"] {
+    --color1: red;
+  }
+  #calls li[status*="o"][output^="_observer"],
+  #calls li[status*="c"][output^="_observer"],
+  #calls li[status*="e"][output^="_observer"] {
+    --color2: lightblue;
+  }
+  #calls li[status*="o"][output="response"]:not([status*="b"]),
+  #calls li[status*="e"][error="response"]:not([status*="b"]) {
+    --color2: red;
+  }
+  #calls li[status*="l"][output^="_observer"] {
+    --color2: blue;
+  }
+  #calls li[post-observable] {
+    background: lightgray;
+  }
+
+  #state summary {
+    color: lightgray;
+  }
+  #state summary[active] {
+    color: green;
+  }
+  #state summary[prop="request"] {
+    color: blue;
+  }
+
+  #state {
+    position: absolute;
+    top: min(30vw, 30vh);
+    right: min(10vw, 10vh);
+  }
+
+  #container {
+    position: relative;
+    margin: min(5vw, 5vh);
+    width: min(90vw, 90vh);
+    height: min(90vw, 90vh);
+    font-size: 10px;
+  }
+  #container * {
+    position: absolute;
+  }
+  flow-action, flow-state-placeholder {
+    top: calc(var(--y) * var(--unit));
+    left: calc(var(--x) * var(--unit));
+    width: calc(var(--unit) * .5);
+    height: calc(var(--unit) * .5);
+  }
+  flow-action {
+    --state-color: lightgrey;
+    --state-border: 0;
+  }
+  flow-action-placeholder, flow-state-placeholder {
+    background: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  flow-action-placeholder {
+    border: 2px solid blue;
+    width: 90%;
+    height: 90%;
+  }
+  flow-state-placeholder {
+    border-radius: 50%;
+    border: 2px solid lightgray;
+  }
+  flow-state-placeholder:first-of-type {
+    border-color: green;
+  }
+  flow-state {
+    width: 100%;
+    height: 100%;
+    border-radius: 2% 50% 50% 50%;
+    border: var(--state-border) solid var(--state-color);
+    transform-origin: center;
+    transform: rotate(calc(var(--angle) - 45deg));
+    top: calc(var(--y) * 200%);
+    left: calc(var(--x) * 200%);
+    background: radial-gradient(circle at 100% 100%, transparent 85%, var(--state-color));
+  }
+
+  flow-edge {
+    border-top: 2px solid var(--state-color);
+    width: calc(var(--diagonal) * 200% - 76%);
+    transform-origin: top left;
+    transform: rotate(var(--angle));
+    top: 50%;
+    left: 50%;
+  }
+  flow-action[resolve][status*="b"][status*="o"] > [type="output"] {--state-color: red;}
+  flow-action[resolved][status*="b"][status*="o"] > flow-state[type="output"] {--state-color: red;}
+  flow-action[resolve][status*="b"][status*="e"] > [type="error"] {--state-color: red;}
+  flow-action[resolved][status*="b"][status*="e"] > flow-state[type="error"] {--state-color: red;}
+
+  flow-action[resolved][status*="c"]:not([resolve]) > flow-edge[type="error"],
+  flow-action[resolved][status*="c"]:not([resolve]) > flow-edge[type="output"],
+  flow-action[resolved][status*="o"]:not([resolve]) > flow-edge[type="error"],
+  flow-action[resolved][status*="o"][status*="b"]:not([resolve]) > flow-edge[type="output"],
+  flow-action[resolved][status*="e"]:not([resolve]) > flow-edge[type="output"] {
+    --state-color: whitesmoke;
+  }
+
+  flow-action[resolve][status*="c"] > [type="output"] {--state-color: black;}
+  flow-action[resolved][status*="c"] > flow-state[type="output"] {--state-color: black;}
+
+
+  flow-action[resolve][status*="e"]:not([status*="b"]) > [type="error"] {--state-color: orange; --state-border: 2px; background-color: rgba(255, 0, 0, 0.3);}
+  flow-action[resolved][status*="e"]:not([status*="b"]) > flow-state[type="error"] {--state-color: orange; --state-border: 2px;}
+
+  flow-action[resolve][status*="o"]:not([status*="b"]) > [type="output"] { --state-color: green; background-color: rgba(0, 255, 0, 0.3);}
+  flow-action[resolved][status*="o"]:not([status*="b"]) > flow-state[type="output"] {--state-color: green; --state-border: 2px;}
+  flow-action[invoke] > [type="input"] {--state-color: green; --state-border: 2px; background-color: rgba(0, 255, 0, 0.3);}
+
+  flow-action[resolved]:not([resolve]) > flow-action-placeholder { border-color: lightgrey; }
+  flow-action[invoked]:not([invoke]) > flow-action-placeholder { border-color: lightgrey; }
+  flow-action[invoked]:not([resolved]) > flow-action-placeholder,
+  flow-action[resolve] > flow-action-placeholder { background: lightblue; }
+
+  flow-edge[optional] {border-top-style: dotted}
+</style>
+<style id="dynamic"></style>
+
+<div id="container"></div>
+<ul id="calls"></ul>
+<div id="state"></div>
+
+<script>
+  function idToPosition(actions, states, res = {}, y = 0) {
+    //states which is an output in the actions
+    const notReadyStates = states.filter(s => actions.find(({output, error}) => output === s || error === s));
+    //actions which after ready states are removed, still lacks a required parameter
+    const notReadyActions = actions.filter(({inputs}) => inputs.filter(p => p[0] !== '*').find(p => notReadyStates.includes(p)));
+    states.filter(s => !notReadyStates.includes(s)).forEach((s, i) => res[s] = [i, y]);
+    actions.filter(a => !notReadyActions.includes(a)).forEach(({id}, i) => res[id] = [i, y + 1]);
+    return notReadyStates.length ? idToPosition(notReadyActions, notReadyStates, res, y + 2) : res;
+  }
+
+  //todo I can just find the count of the observers, and then i can use a custom rule with nth-child?
+  function findObserversResolution(actions, calls2) {
+    const observers = actions.filter(({output}) => output.startsWith('_observer'));
+    return calls2.findIndex(({action, status}) => {
+      if (!(status.indexOf('c') >= 0 || status.indexOf('o') >= 0 || status.indexOf('e') >= 0))
+        return false;
+      const observerIndex = observers.indexOf(action);
+      if (observerIndex === -1)
+        return false;
+      observers.splice(observerIndex, 1);
+      return !observers.length;
+    });
+  }
+
+  function computeOM(actions, calls) {
+    actions = actions.map(([inputs, fun, output, error], id) => ({id, inputs, fun, output, error}));
+    const states = actions
+      .map(({inputs, output, error}) => [...inputs, output, error]).flat(1)
+      .map(s => s[0] === '*' ? s.substr(1) : s)
+      .filter((s, i, ar) => ar.indexOf(s) === i);
+    const idToPos = idToPosition(actions, states);
+    const [maxX, maxY] = Object.values(idToPos).reduce(([max, may], [x, y]) => [Math.max(x, max), Math.max(y, may)], [0, 0]);
+    const calls2 = calls.split(':').slice(1).map(c => c.split('_')).map(([action, status], id) => ({
+      id,
+      action: actions[parseInt(action)],
+      status
+    }));
+    const lastObserver = findObserversResolution(actions, calls2);
+    if (lastObserver !== -1)
+      calls2[lastObserver].status += 'l';
+    return [actions, states, idToPos, calls2, maxX, maxY];
+  }
+</script>
+
+<script src="https://unpkg.com/uhtml">/* global uhtml */</script>
+<script>
+  html = uhtml.html;
+  render = uhtml.render;
+
+  function styleXY(x, y) {
+    return `--x: ${x}; --y: ${y};`;
+  }
+
+  function styleXY2(x, y) {
+    const a = Math.atan2(y, x) * 180 / Math.PI;
+    const d = Math.sqrt(x * x + y * y);
+    return `--x: ${x}; --y: ${y}; --angle: ${a}deg; --diagonal: ${d};`
+  }
+
+  function printAction(action, idToPos, step, calls) {
+    let {id, inputs, fun, output, error} = action;
+    const [x, y] = idToPos[id];
+    const [xO, yO] = idToPos[output];
+    const [xE, yE] = idToPos[error];
+
+    const myCalls = calls.filter(({action: a}) => action === a);
+    const invokeStep = myCalls[0]?.id;
+    const resolveStep = myCalls.length === 2 ? myCalls[1].id : myCalls[0]?.id;
+
+    const status = (myCalls[0]?.status || '') + (myCalls[1]?.status || '');
+    const invoke = invokeStep === step || undefined;
+    const resolve = resolveStep === step || undefined;
+    const resolved = resolveStep <= step || undefined;
+    const invoked = invokeStep <= step || undefined;
+    const awaiting = (step > invokeStep && step < resolveStep) || undefined;
+
+    return html`
+      <flow-action style=${styleXY(x, y)}
+                   invoked=${invoked} invoke=${invoke} awaiting=${awaiting} resolve=${resolve}
+                   resolved=${resolved} status=${status}>
+
+        <flow-edge type=error style=${styleXY2(xE - x, yE - y)}></flow-edge>
+        <flow-state type=error style=${styleXY2(xE - x, yE - y)} resolve=${resolveStep} step=${step}></flow-state>
+
+        <flow-edge type=output style=${styleXY2(xO - x, yO - y)}></flow-edge>
+        <flow-state type=output style=${styleXY2(xO - x, yO - y)} resolve=${resolveStep} step=${step}></flow-state>
+
+        ${inputs.map(input => {
+          const optional = input[0] === '*' || undefined;
+          input = optional ? input.substr(1) : input;
+          const [xI, yI] = idToPos[input];
+          return html`
+            <flow-edge type=input style=${styleXY2(xI - x, yI - y)} optional=${optional}></flow-edge>
+            <flow-state type=input style=${styleXY2(xI - x, yI - y)} invoke=${invokeStep} step=${step}
+                        optional=${optional}></flow-state>
+          `;
+        })}
+        <flow-action-placeholder>${fun || 'fun' + id}</flow-action-placeholder>
+      </flow-action>
+    `;
+  }
+
+  function renderCall(id, action, status, step, lastObserverIndex) {
+    return html`
+      <li id=${"call" + id} action=${action.id} output=${action.output} error=${action.error} status=${status}
+          current=${id === step || undefined} post-observable=${(lastObserverIndex !== -1 && id > lastObserverIndex) || undefined}>${id}
+      </li>`;
+  }
+
+  function renderStatePlaceHolder(idToPos, state) {
+    return html`
+      <flow-state-placeholder class="action" style=${styleXY(...idToPos[state])}>${state}</flow-state-placeholder>`;
+  }
+
+  function renderStateDetails(prop, value, active) {
+    return html`
+      <details>
+        <summary prop=${prop} active=${active || undefined}>${prop}</summary>
+        <pre>${JSON.stringify(value, null, 2)}</pre>
+      </details>`;
+  }
+
+  function updateView([actions, states, idToPos, calls, maxX, maxY], variables, step) {
+    const setStates = calls
+      .slice(0, step + 1)
+      .map(({action, status}) =>
+        status.indexOf('o') >= 0 ? action.output : status.indexOf('e') >= 0 ? action.error : undefined)
+      .filter(state => state);
+    const lastObserverIndex = calls.findIndex(({status}) => status.indexOf('l') >= 0);
+
+    render(document.querySelector('style#dynamic'), html`${`
+      :root{ --unit: ${Math.floor(100 / (Math.max(maxY, maxX) + 1))}%}
+    `}`);
+
+    render(document.querySelector('#calls'), html`
+      ${calls.map(({id, action, status}) => renderCall(id, action, status, step, lastObserverIndex))}
+    `);
+
+    render(document.querySelector('#container'), html`
+      ${states.map(state => renderStatePlaceHolder(idToPos, state))}
+      ${actions.map(action => printAction(action, idToPos, step, calls))}
+    `);
+
+    render(document.querySelector('#state'), html`
+      ${Object.entries(variables).map(([prop, value]) => renderStateDetails(prop, value, setStates.includes(prop)))}`);
+  }
+
+  function init() {
+    if (!location.hash) return;
+    const {actions = [], trace = '', state = {}, functions = {}} = JSON.parse(atob(location.hash.substr(1)));
+    window.variables = state;
+    model = computeOM(actions, trace);
+    step = 0;
+    maxSteps = model[3].length - 1;
+    updateView(model, variables, step);
+  }
+
+  function clamp(min, nextStep, max) {
+    return nextStep > max ? min : nextStep < min ? max : nextStep;
+  }
+
+  setTimeout(init);
+
+  window.addEventListener('hashchange', init);
+
+  window.addEventListener('keydown', e => {
+    e.key === 'ArrowRight' && (step = clamp(0, ++step, maxSteps));
+    e.key === 'ArrowLeft' && (step = clamp(0, --step, maxSteps));
+    updateView(model, variables, step);
+  });
+</script>
+
+<script>
+  // let test = `eyJhY3Rpb25zIjpbW1sicmVxdWVzdCJdLCIiLCJhIiwiYSJdLFtbInJlcXVlc3QiXSwiIiwiYSIsInJlc3BvbnNlIl0sW1siJiZhIl0sIiIsIm5vIiwiTm8iXSxbWyImYSIsNDIsIlwiaGVsbG8gc3Vuc2hpbmVcIiJdLCJsb2ciLCJfb2JzZXJ2ZXJfMyIsIl9lcnJvcl8zIl0sW1sicmVxdWVzdCJdLCIiLCJibyIsImJvRXJyb3IiXSxbWyJcIlxcXCJjb1xcXCJcIiIsIiFibyJdLCJmcm9tQ2FjaGVGdW4iLCJjbyIsIl9ub3RJbkNhY2hlNSJdLFtbIiFibyIsIiZfbm90SW5DYWNoZTUiXSwiIiwiX3RvQ2FjaGU1IiwiX2Vycm9yXzUiXSxbWyImJmNvIiwiX3RvQ2FjaGU1IiwiXCJcXFwiY29cXFwiXCIiLCIhYm8iXSwidG9DYWNoZUZ1biIsIl9vYnNlcnZlcl81LTQiLCJfZXJyb3JfNS0zIl0sW1siX3RvQ2FjaGU1Il0sIiIsImNvIiwiX2Vycm9yXzUtNCJdLFtbInJlcXVlc3QiXSwidG9vTGF0ZSIsInRvb0xhdGUiLCJfZXJyb3JfNiJdLFtbIm1heWJlRXJyb3IiXSwiIiwiX29ic2VydmVyXzciLCJfZXJyb3JfNyJdLFtbIlwiXFxcImNhY2hlMVxcXCJcIiJdLCJmcm9tQ2FjaGVGdW4iLCJjYWNoZTEiLCJfbm90SW5DYWNoZTgiXSxbWyJyZXF1ZXN0IiwiJl9ub3RJbkNhY2hlOCJdLCIiLCJfdG9DYWNoZTgiLCJfZXJyb3JfOCJdLFtbIiYmY2FjaGUxIiwiX3RvQ2FjaGU4IiwiXCJcXFwiY2FjaGUxXFxcIlwiIl0sInRvQ2FjaGVGdW4iLCJfb2JzZXJ2ZXJfOC00IiwiX2Vycm9yXzgtMyJdLFtbIl90b0NhY2hlOCJdLCIiLCJjYWNoZTEiLCJfZXJyb3JfOC00Il0sW1siXCJcXFwiY2FjaGUyXFxcIlwiIl0sImZyb21DYWNoZUZ1biIsImNhY2hlMiIsIl9ub3RJbkNhY2hlOSJdLFtbInJlcXVlc3QiLCJhIiwiJl9ub3RJbkNhY2hlOSJdLCIiLCJfdG9DYWNoZTkiLCJfZXJyb3JfOSJdLFtbIiYmY2FjaGUyIiwiX3RvQ2FjaGU5IiwiXCJcXFwiY2FjaGUyXFxcIlwiIl0sInRvQ2FjaGVGdW4iLCJfb2JzZXJ2ZXJfOS00IiwiX2Vycm9yXzktMyJdLFtbIl90b0NhY2hlOSJdLCIiLCJjYWNoZTIiLCJfZXJyb3JfOS00Il0sW1siXCJcXFwiY2FjaGUzXFxcIlwiIl0sImZyb21DYWNoZUZ1biIsImNhY2hlMyIsIl9ub3RJbkNhY2hlMTAiXSxbWyJhIiwiJl9ub3RJbkNhY2hlMTAiXSwiIiwiX3RvQ2FjaGUxMCIsIl9lcnJvcl8xMCJdLFtbIiYmY2FjaGUzIiwiX3RvQ2FjaGUxMCIsIlwiXFxcImNhY2hlM1xcXCJcIiJdLCJ0b0NhY2hlRnVuIiwiX29ic2VydmVyXzEwLTQiLCJfZXJyb3JfMTAtMyJdLFtbIl90b0NhY2hlMTAiXSwiIiwiY2FjaGUzIiwiX2Vycm9yXzEwLTQiXSxbWyJyZXF1ZXN0Il0sIm1heWJlRXJyb3IiLCJoZWxsbyIsIm1heWJlRXJyb3IiXSxbWyJtYXliZUVycm9yIl0sIm1heWJlRXJyb3JIYW5kbGVyIiwiZXJyb3IiLCJfZXJyb3JfMTIiXSxbWyJyZXF1ZXN0Il0sImhlbGxvU3Vuc2hpbmUiLCJyZXNwb25zZSIsIl9lcnJvcl8xMyJdLFtbImVycm9yIl0sImVycm9yVG9SZXN1bHQiLCJyZXNwb25zZSIsInJlc3BvbnNlIl0sW1sicmVzcG9uc2UiLCIqaGVsbG8iXSwibG9nIiwiX29ic2VydmVyXzE1IiwiX2Vycm9yXzE1Il1dLCJzZXF1ZW5jZSI6IjowX2lvOjFfYzoyX2M6M19pbzo0X2lvOjUtMV9pZTo1LTJfaW86NS0zX2lvOjUtNF9pbzo2X2lhOjgtMV9pZTo4LTJfaW86OC0zX2lvOjgtNF9pbzo5LTFfaWU6OS0yX2lvOjktM19pbzo5LTRfaW86MTAtMV9pZToxMC0yX2lvOjEwLTNfaW86MTAtNF9pbzoxMV9pZTo3X2lvOjEyX2lvOjEzX2lhOjE0X2lvOjE1X2lhOjEzX29iOjE1X286Nl9vIiwidmFyaWFibGVzIjp7InJlcXVlc3QiOnsidXJsIjoiaHR0cHM6Ly92Zy5uby9lcnJvciJ9LCJhIjoiMSIsIl9vYnNlcnZlcl8zIjpudWxsLCJibyI6MjAsIl9ub3RJbkNhY2hlNSI6e30sIl90b0NhY2hlNSI6MjEsIl9vYnNlcnZlcl81LTQiOm51bGwsImNvIjoyMSwiX25vdEluQ2FjaGU4Ijp7fSwiX3RvQ2FjaGU4IjoiaGVsbG8xIGh0dHBzOi8vdmcubm8vZXJyb3IiLCJfb2JzZXJ2ZXJfOC00IjpudWxsLCJjYWNoZTEiOiJoZWxsbzEgaHR0cHM6Ly92Zy5uby9lcnJvciIsIl9ub3RJbkNhY2hlOSI6e30sIl90b0NhY2hlOSI6ImhlbGxvMiBodHRwczovL3ZnLm5vL2Vycm9yIiwiX29ic2VydmVyXzktNCI6bnVsbCwiY2FjaGUyIjoiaGVsbG8yIGh0dHBzOi8vdmcubm8vZXJyb3IiLCJfbm90SW5DYWNoZTEwIjp7fSwiX3RvQ2FjaGUxMCI6ImhlbGxvMyB1bmRlZmluZWQiLCJfb2JzZXJ2ZXJfMTAtNCI6bnVsbCwiY2FjaGUzIjoiaGVsbG8zIHVuZGVmaW5lZCIsIm1heWJlRXJyb3IiOnt9LCJfb2JzZXJ2ZXJfNyI6MSwiZXJyb3IiOnsic3RhdHVzIjo0MDN9LCJyZXNwb25zZSI6e30sIl9vYnNlcnZlcl8xNSI6bnVsbCwidG9vTGF0ZSI6InRoaXMgZnVuY3Rpb24gcnVucyBhZnRlciB0aGUgbGFzdCBvYnNlcnZlciJ9fQ`;
+  // location.hash = test;
+</script>
+<pre hidden>
+Todo:
+1. add state data when you press on it.
+2. add function code when you press on action.
+3. make the animation nicer.
+4. make a bar in the animation list under setting of response, and make a special arrow in the map light up when the response is set.
+5. make a visualisation of waitUntil and respondWith and notWaitedFor.
+6. if there are other states used, but not given in, then mark those as syntax errors.
+7. states such as `a` should be marked as `not observeds`.
+8. etc.
+
+//todo
+a. start of frame. (re-)start state machine.
+a1. the very first call sequence marks the start of a frame.
+a2. Then, every call sequence that doesn't include 'i', but do include 'e' or 'o' marks the start of a frame.
+this is useful as it illustrate a time when the statemachine has been left in an incomplete state.
+These pauses are relevant because here we can both see which functions we are waiting for, and what state the system is in, while we await.
+
+//todo Loose end analysis. "Loose ends" are states that are defined by the user, but not used as input anywhere.
+// 'response' and _observer_s are such states, that will be run.
+// There should be a rule that says that loose ends will be cleaned up and removed whenever possible.
+// If you want to have a state that is to be left as a loose end, we need to give this a prefix.
+// frame.postFrame && frame.postFrame.forEach(fun => fun(frame));
+
+</pre>

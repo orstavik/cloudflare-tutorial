@@ -1,0 +1,49 @@
+<h1>Here comes the text:</h1>
+<textarea style="width: 100%; height: 30em;"></textarea>
+<script>
+  const pre = document.querySelector("textarea");
+
+  function printEditableFunction([name, body]) {
+    if (body.startsWith('data:text/javascript,'))
+      return body.substr(21).replaceAll('\\\n', '\n').replaceAll('\"', '"') + '\n';
+    name = name[0] === '[' ? JSON.parse(name).join(', ') : name;
+    return `import {${name}} from "${body}";`;
+  }
+
+  function editorText(actions, functions) {
+    const functionsText = Object.entries(functions).map(printEditableFunction).join('\n');
+    const actionsText = `
+const actions = [
+  ${actions.map(action=>JSON.stringify(action)).join(',\n  ')}
+];`
+    return `${functionsText}${actionsText}`;
+  }
+
+  function hashToText() {
+    const data = location.hash.substr(1);
+    const obj = JSON.parse(atob(data));
+    const {actions, functions} = obj;
+    pre.value = editorText(actions, functions);
+  }
+
+  addEventListener("hashchange", hashToText);
+  hashToText();
+
+
+  function getCodeFromEditor(text) {
+    let [code, actions] = text.split('const actions =');
+    actions = JSON.parse(actions.substr(0, actions.length - 1));
+    const keys = JSON.stringify(actions.map(([p, fun]) => fun));
+    const functions = {};
+    functions[keys] = "data:text/javascript,\\\n" + code.replaceAll('\n', '\\\n').replaceAll('"', '\\"');
+    return {functions, actions};
+  }
+
+  function textToMessage(){
+    const {functions, actions} = getCodeFromEditor(pre.value);
+    const hash = btoa(JSON.stringify({actions, functions}));
+    window.parent.postMessage(hash, '*');
+  }
+
+  window.addEventListener("change", textToMessage);
+</script>

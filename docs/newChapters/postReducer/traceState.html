@@ -1,0 +1,78 @@
+<script>
+
+  //1. trace that register all invocations of a set of functions
+  function trace(...functions) {
+    const table = [];
+    const newFunctions = functions.map(fun => {
+      return function (...args) {
+        const res = fun(...args);
+        table.push([args, fun, res]);
+        return res;
+      }
+    });
+
+    function getTrace() {
+      return table;
+    }
+
+    return [getTrace, ...newFunctions];
+  }
+
+  //2. trace that register all invocations of a set of functions, handling errors
+
+  function traceWithError(...functions) {
+    const table = [];
+    const newFunctions = functions.map(fun => {
+      return function (...args) {
+        try {
+          const res = fun(...args);
+          table.push([args, fun, res]);
+          return res;
+        } catch (err) {
+          table.push([args, fun, , err]); //error are placed in a secondary position.
+          throw err;
+        }
+      };
+    });
+
+    function getTrace() {
+      return table;
+    }
+
+    return [getTrace, ...newFunctions];
+  }
+
+  //3. trace that register all invocations, handling errors, and tackle async functions
+  //   Here we need to have a separate counter for the invocation, as async responses for
+  //   the same function might come in alternate sequence.
+  function traceWithErrorAsync(...functions) {
+    let i = 0;
+    const table = [];
+    const newFunctions = functions.map(fun => {
+      return function (...args) {
+        let x = i++;
+        try {
+          const res = fun(...args);
+          if (res instanceof Promise) {
+            res.then(res2 => table.push([x, , , res2]));
+            res.catch(err2 => table.push([x, , , , err2]));
+          } else {
+            table.push([x, args, fun, res]);
+          }
+          return res;
+        } catch (err) {
+          table.push([x, args, fun, , err]); //error are placed in a secondary position.
+          throw err;
+        }
+      };
+    });
+
+    function getTrace() {
+      return table;
+    }
+
+    return [getTrace, ...newFunctions];
+  }
+
+
+</script>

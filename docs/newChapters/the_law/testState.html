@@ -1,0 +1,87 @@
+<script>
+  function stateManager(...originals) {
+    const trace = [];
+    let count = 0;
+    const regulators = originals.map(original => {
+      const name = original.name;
+      const regulator = function (...args) {
+        const id = count++;
+        try {
+          trace.push({id, name, args});
+          const output = original(...args);
+          if (!(output instanceof Promise)) {
+            trace.push({id, name, type: 'sync', output});
+            return output;
+          }
+          const asyncStatus = {id, name, type: 'async', pending: output};
+          trace.push(asyncStatus);
+          output.then(output => trace.push({id, name, type: 'async', output}));
+          output.catch(error => trace.push({id, name, type: 'async', error}));
+          output.finally(() => delete asyncStatus.pending); //att! mutation.
+          return output;
+        } catch (error) {
+          trace.push({id, type: 'sync', name, error});
+          throw error;
+        }
+      };
+      Object.defineProperty(regulator, 'name', {value: '_sm_' + name});
+      return regulator;
+    });
+
+    //return the trace. If an object is passed in, then any argument or output value matching a property will be renamed.
+    function inspectState(obj = {}) {
+      const reverseLookup = new Map(Object.entries(obj).map(([one, two]) => [two, one]));
+      const map = trace.map(({id, name, args, output, error}) => {
+        const res = {id, name};
+        if (error && reverseLookup.has(error)) {
+          res.error = reverseLookup.get(error);
+        } else if (output && reverseLookup.has(output)) {
+          res.output = reverseLookup.get(output);
+        } else if (args) {
+          const mapArgs = {};
+          let found;
+          for (let i = 0; i < args.length; i++)
+            reverseLookup.has(args[i]) && (found = mapArgs[i] = reverseLookup.get(args[i]));
+          found && (res.args = mapArgs);
+        }
+        return res;
+      }).map(e => e.args || e.output || e.error ? e : undefined);
+      return {map, trace: JSON.stringify(trace)};
+    }
+
+    //if recursive == true, then ready returns true only when no tasks remain pending.
+    //else, the ready await all pending tasks at the point queried returns
+    function ready(recursive) {
+      let promises = trace.filter(({pending}) => pending).map(({pending}) => pending);
+      if (!promises.length)
+        return true;
+      if (!recursive)
+        return Promise.allSettled(promises).then(() => !trace.filter(({pending}) => pending).map(({pending}) => pending).length);
+      return Promise.allSettled(promises).then(() => ready(recursive));
+    }
+
+    return [inspectState, ready, ...regulators];
+  }
+
+  function SUM(a, b) {
+    return a + b;
+  }
+
+  const [inspectState, ready, sum, pow, sqrt] = stateManager(SUM, Math.pow, Math.sqrt);
+
+  function hypotenuse(a, b) {
+    return sqrt(sum(pow(a, 2), pow(b, 2)));
+  }
+
+  const state = {a: 3, b: 4};
+  state.c = hypotenuse(3, state.b);
+  //we can query the state immediately
+  //we can await until all currently pending functions are resolved
+  //we can await until all current and future pending functions are resolved
+  console.log(ready());
+  console.log(state);
+  const {map, trace} = inspectState(state);
+
+  console.log(map);
+  console.log(JSON.parse(trace));
+</script>

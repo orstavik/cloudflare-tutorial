@@ -1,0 +1,172 @@
+//todo the purpose of the reducer pattern is to make the logic more declarative.
+
+//e is the state, but because it is async, we must decorate the state, and not replace it.
+//reducer is a pure(-ish) function. It can get data from outside, and it can use only the data in the incoming state.
+//errors needs to be masked on a reducer/reducer basis.
+
+//the properties of the context object is *both* a property *and* a state marker at the same time.
+//the property is both a point in space and a point in time.
+
+//when more than one promise leads to a property, then first come first serve.
+//This way, reducers can race to reach a point in space/time, and only the first reducer will fill the space/win the race.
+//a reducer will not start until all its marked dependencies are fulfilled.
+
+//This is a time/machine, as much as it is a state.
+<script>
+  const p_r = new WeakMap();
+  const firstComeWins = {
+    get: function (target, prop, receiver) {    //if the target has already been set, then return that result always.
+      if (prop in target) {
+        const result = Reflect.get(...arguments);
+        return result instanceof Response ? result.clone() : result;   //x. only clones are returned for all Response objects.
+      }
+      let resolver;                             //when a property is requested, and there is nothing in there, a pending Promise is returned
+      const promise = new Promise(r => resolver = r);
+      p_r.set(promise, resolver);
+      Reflect.set(target, prop, promise);
+      return promise;
+    },
+    set: function (target, prop, value) {
+      //1. the prop has already been completed, do nothing
+      if (prop in target && !(target[prop] instanceof Promise))
+        return;
+      //the prop might either be unset or a Promise at this point
+
+      //2a. the value in is resolved and the prop is unset and
+      if (!(value instanceof Promise) && !(prop in target))
+        return Reflect.set(target, prop, value);
+
+      //2b. the value in is resolved and the prop contains a Promise
+      if (!(value instanceof Promise) /*&& prop in target)*/) {
+        const resolver = p_r.get(target[prop]);
+        Reflect.set(target, prop, value);
+        return resolver(value instanceof Response ? value.clone() : value);
+      }
+
+      //3. both value in and the old value are both promises
+      // value.then(newVal => target[prop] = newVal); //todo this didn't work, it behaved like the Reflect..
+      value.then(newVal => this.set(target, prop, newVal));
+
+      // const resolver = p_r.get(target[prop]);
+      // value.then(newVal => {
+      //   if (!(target[prop] instanceof Promise)) //if the target[prop] has already been resolved, then do nothing.
+      //     return;
+      //   Reflect.set(target, prop, newVal);
+      //   resolver(newVal instanceof Response ? newVal.clone() : newVal);
+      // });
+    }
+  };
+
+  //1. the asyncErrorRace with dependency support
+  const neverEndingPromise = new Promise(r => r);
+
+  function asyncErrorRace(state, fun, args) {
+    let resCb, errCb;
+    const awaitArgs = args.filter(arg => arg[0] !== '*').map(arg => state[arg]).filter(arg => arg instanceof Promise);
+    if (!awaitArgs.length) {        //attempt fully sync management
+      const argsRightNow = args.map(arg => state[arg[0] === '*' ? arg.substr(1) : arg]).map(arg => arg instanceof Promise ? undefined : arg);
+      try {
+        const res = fun(...argsRightNow);
+        if (!(res instanceof Promise))
+          return {success: res, error: neverEndingPromise};
+        const success = new Promise(r => resCb = r), error = new Promise(r => errCb = r);
+        res.then(r => resCb(r), e => errCb(e));
+        return {success, error};
+      } catch (err) {
+        return {success: neverEndingPromise, error: err};
+      }
+    }
+    const success = new Promise(r => resCb = r), error = new Promise(r => errCb = r);
+    Promise.allSettled(awaitArgs).then(() => {
+      const argsRightNow = args.map(arg => state[arg[0] === '*' ? arg.substr(1) : arg]).map(arg => arg instanceof Promise ? undefined : arg);
+      try {
+        const res = fun(...argsRightNow);
+        res instanceof Promise ? res.then(r => resCb(r), e => errCb(e)) : resCb(res);
+      } catch (err) {
+        errCb(err);
+      }
+    });
+    return {success, error};
+  }
+
+  //4. finally the reducer.
+  function reducerMachine(request, listOfReducers) {
+    const state = new Proxy({request}, firstComeWins);
+    const observers = [];
+    for (let [args, reducer, prop, propError] of listOfReducers) {
+      const {success, error} = asyncErrorRace(state, reducer, args);
+      prop && (state[prop] = success);
+      propError && (state[propError] = error);
+      !prop && !propError && (observers.push(success), observers.push(error));
+    }
+    return [state.response, observers];
+  }
+
+  function maybeError(request) {
+    if (new URL(request.url).pathname === '/error')
+      throw new SyntaxError('bobsibob');
+    return 'world';
+  }
+
+  function maybeErrorHandler(maybeError) {
+    //must remember to await the maybeError prop, even though we do not use it.
+    //This is counter common js practices and use of the async/await syntax.
+    //   It will work, but it is unconventional to just waits as explicitly as here stated.
+    const replace = new Error('this is a public hello world error message.');
+    replace.status = 403;
+    return replace
+  }
+
+  function errorToResult(error) {
+    return new Response(error.toString() + '\nLog: ' + undefined, {status: error.status || 404});
+  }
+
+  async function helloSunshine() {
+    await new Promise(r => setTimeout(r, 10));
+    return new Response('hello sunshine');
+  }
+
+  async function log(response, hello) {
+    const clone = response.clone();
+    await new Promise(r => setTimeout(r, 1000));
+    console.log('logging later ' + clone.status + hello);
+    // fetch('log', data);
+  }
+
+  const listOfReducers = [
+    //todo hello is not used, did you forget it as a dependency, or is this something that you are only using in an observer capacity (in which case you can skip the success property/undefined/falsy it
+    [['request'], maybeError, 'hello', 'maybeError'],
+    // //todo typo, we must print outputs not used, and inputs not defined.
+    [['maybeError'], maybeErrorHandler, 'error'],
+    // //todo we no longer need to sort the process, but maybe we should anyway
+    [['request'], helloSunshine, 'response', 'error'],
+    //todo if you don't know what to do with the error, then pass it to the response
+    [['error'], errorToResult, 'response', 'cantPrintErrorError'],
+    //todo observers are marked by no return, will implement e.waitUntil in the reducerMachine
+    [['response', '*hello'], log],
+  ];
+
+  // addEventListener('fetch', e => e.passThroughOnException(), e.respondWith(reducerMachine(e, listOfReducers)));
+
+  window.url = 'https://vg.no/error';
+  Object.defineProperties(Event.prototype, {
+    passThroughOnException: {
+      value: data => console.log('passThroughOnException.')
+    },
+    waitUntil: {
+      value: async data => console.log('waitUntil: ', await data)
+    },
+    respondWith: {
+      value: async data => console.log('respondWith: ', await data)
+    },
+  });
+  addEventListener('click', e => e.request = {url: window.url});
+
+  addEventListener('click', e => {
+    e.passThroughOnException();
+    const [response, observers] = reducerMachine(e.request, listOfReducers);
+    e.waitUntil(Promise.allSettled(observers));
+    e.respondWith(response);
+  });
+
+</script>

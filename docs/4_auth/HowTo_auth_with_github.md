@@ -92,3 +92,4 @@ addEventListener('fetch', e=> e.respondWith(handleRequest(e.request)));
 
 ## ref
  * [how to use the accesstoken to get the user data from github](https://developer.github.com/v3/#authentication)
+ * [github: user data json](https://developer.github.com/v3/users/)

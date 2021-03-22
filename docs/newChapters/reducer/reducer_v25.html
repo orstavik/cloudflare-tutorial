@@ -1,0 +1,183 @@
+//todo the purpose of the reducer pattern is to make the logic more declarative.
+
+//e is the state, but because it is async, we must decorate the state, and not replace it.
+//reducer is a pure(-ish) function. It can get data from outside, and it can use only the data in the incoming state.
+//errors needs to be masked on a reducer/reducer basis.
+
+//the properties of the context object is *both* a property *and* a state marker at the same time.
+//the property is both a point in space and a point in time.
+
+//when more than one promise leads to a property, then first come first serve.
+//This way, reducers can race to reach a point in space/time, and only the first reducer will fill the space/win the race.
+//a reducer will not start until all its marked dependencies are fulfilled.
+
+//This is a time/machine, as much as it is a state.
+
+<script type="module">
+
+  //optimizations.
+  // 1. optimize actions run. Remove from the list the actions already processed?
+  // 1. optimize variable resolution. This is done from scratch again and again.
+
+  //att! mutates the actions list!
+  function syntaxCheck(actions) {
+    let hasResponse, hasObservers;
+    for (let i = 0; i < actions.length; i++) {
+      let action = actions[i];
+      if (action[2] === 'response') hasResponse = true;
+      if (action.length === 2) (hasObservers = true), action.push('_observer' + i), action.push('_error' + i);
+      else if (action.length === 3) action.push('_error' + i);
+    }
+    return {hasResponse, hasObservers};
+  }
+
+  function startStack(actions, startState, debug) {
+    const {hasResponse, hasObservers} = syntaxCheck(actions);
+    let resolverResponse, resolverObservers;
+    const response = hasResponse && new Promise(r => resolverResponse = r);
+    const observers = hasObservers && new Promise(r => resolverObservers = r);
+    //todo it would be possible to get the count and variables from the actions object. but much slower. so, we keep it.
+    const frame = {actions, variables: startState, debug, resolverResponse, resolverObservers, sequence: []};
+    run(frame);
+    return {response, observers};
+  }
+
+  function setDynamicVariable(frame, prop, value, seq) {
+    if (frame.variables[prop])    //if the property is already filled, and the set is blocked, then no new frame will run.
+      return frame.sequence.push(seq + 'b'); //type is 'ae' for async error, 'a' async result, '' sync result, 'e' sync error
+    frame.sequence.push(seq);
+    frame.variables[prop] = value;
+    if (prop === 'response' && frame.resolverResponse)
+      frame.resolverResponse(value);
+    if (frame.resolverObservers && prop.startsWith('_observer') && !frame.actions.find(action => action[2].startsWith('_observer') && action.length < 6))
+      frame.resolverObservers(true);
+    return true;
+  }
+
+  //returns either two Promises or either only success(not a Promise) or error (not a Promise)
+  function runFun(fun, variables, params) {
+    try {
+      const args = params.map(p => variables[p[0] === '*' ? p.substr(0) : p]);
+      const res = fun(...args);
+      if (!(res instanceof Promise))
+        return {success: res};
+      let successResolver, errorResolver;
+      const success = new Promise(r => successResolver = r), error = new Promise(r => errorResolver = r);
+      res.then(v => successResolver(v), e => errorResolver(e));
+      return {success, error};
+    } catch (err) {
+      return {error: err};
+    }
+  }
+
+  function doDebug(debug, actions, variables, sequence) {
+    if (debug instanceof Function)
+      debug(actions, variables, sequence);
+    actions = actions.map(([params, fun, output, error]) => [params, fun.name, output, error]);//be careful not to mutate actions here..
+    const state = {};
+    for (let [key, value] of Object.entries(variables))
+      state[key] = value === undefined ? null : value;
+    console.log(btoa(JSON.stringify({actions, sequence, variables: state})));
+  }
+
+  function run(frame) {
+    const {actions, variables, debug, sequence} = frame;
+    debug && doDebug(debug, actions, variables, sequence);
+    for (let i = 0; i < actions.length; i++) {
+      if (sequence.includes(i + '_i') || sequence.includes(i + '_c')) //already invoked/cancelled
+        continue;
+      let [args, fun, prop, propError] = actions[i];
+      if (args.find(arg => arg[0] !== '*' && !(arg in variables)))//find unset, not-* arg
+        continue;
+      if (prop in variables) {//goal completed, cancelling
+        sequence.push(i + '_c');
+        continue;
+      }
+      sequence.push(i + '_i');       //adding invoked
+      const result = runFun(fun, variables, args);
+      if (result.success instanceof Promise) {
+        result.success.then(s => setDynamicVariable(frame, prop, s, i + '_ao') && run(frame));
+        result.error.then(e => setDynamicVariable(frame, propError, e, i + '_ae') && run(frame));
+      } else if ('success' in result) {
+        return setDynamicVariable(frame, prop, result.success, i + '_o') && run(frame);    //TCO
+      } else /*if ('error' in result)*/ {
+        return setDynamicVariable(frame, propError, result.error, i + '_e') && run(frame); //TCO
+      }
+    }
+    //todo if no action is added to the initial input, we have a dead end. This can be syntax checked.
+    //todo the observers and the response might not be disconnected along the way. This can also be syntax checked, if error leads to nowhere. But, this might and might not happen. So this is also best to check for run-time.
+    //todo This means that we at this end point need to check to see if there are no unresolved issues.
+    //todo here we would need to dispatch an error maybe..
+  }
+
+
+  function maybeError(request) {
+    if (new URL(request.url).pathname === '/error')
+      throw new SyntaxError('bobsibob');
+    return 'world';
+  }
+
+  function maybeErrorHandler(maybeError) {
+    const replace = new Error('this is a public hello world error message.');
+    replace.status = 403;
+    return replace;
+  }
+
+  function errorToResult(error) {
+    return new Response(error.toString() + '\nLog: ' + undefined, {status: error.status || 404});
+  }
+
+  async function helloSunshine() {
+    await new Promise(r => setTimeout(r, 500));
+    return new Response('hello sunshine');
+  }
+
+  async function log(response, hello) {
+    const clone = response.clone();
+    await new Promise(r => setTimeout(r, 500));
+    console.log('logging later ' + clone.status + hello);
+    // fetch('log', data);
+  }
+
+  const listOfReducers = [
+    //testing reducer that is not called
+    [['request'], () => '1', 'a', 'a'],
+    [['request'], () => {
+      throw new Error('should never happen')
+    }, 'a', 'response'],
+
+    //todo testing
+    [['request'], maybeError, 'hello', 'maybeError'],
+    [['maybeError'], maybeErrorHandler, 'error'],
+    [['request'], helloSunshine, 'response'],
+    [['error'], errorToResult, 'response', 'response'],
+    [['response', '*hello'], log],
+  ];
+
+  window.url = 'https://vg.no/error';
+  addEventListener('click', e => e.request = {url: window.url});
+
+  Object.defineProperties(Event.prototype, {
+    passThroughOnException: {
+      value: data => console.log('passThroughOnException.')
+    },
+    waitUntil: {
+      value: async data => console.log('waitUntil: ', await data)
+    },
+    respondWith: {
+      value: async data => console.log('respondWith: ', await data)
+    },
+  });
+
+  addEventListener('click', e => {
+    const frame = startStack(listOfReducers, {request: e.request}, true);
+    frame.observers && e.waitUntil(frame.observers);
+    frame.response && e.respondWith(async function () {
+      const response = await frame.response;
+      if (response !== undefined)                                  //allow for async `response` value of undefined to also trigger subsystem CDN
+        return response;
+      e.passThroughOnException();
+      throw new Error();
+    }());
+  });
+</script>

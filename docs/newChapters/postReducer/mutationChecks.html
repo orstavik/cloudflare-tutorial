@@ -1,0 +1,50 @@
+<script>
+
+  function MutationCheck(func) {
+    const fun = function (...args) {
+      const keys = JSON.stringify(args);
+      const res = func(...args);
+      const keys2 = JSON.stringify(args);
+      if (keys !== keys2)
+        return [res, `[${keys}, ${keys2}]`];
+      return [res];
+    }
+    fun.name = '_mutation_' + func.name;
+    return fun;
+  }
+
+  function asyncMutationCheck(func) {
+    const fun = async function (...args) {
+      const keys = JSON.stringify(args);
+      const res = await func(...args);
+      const keys2 = JSON.stringify(args);
+      if (keys !== keys2)
+        return [res, `[${keys}, ${keys2}]`];
+      return [res];
+    }
+    fun.name = '_mutation_' + func.name;
+    return fun;
+  }
+
+  function superMutationCheck(func) {
+    const fun = function (...args) {
+      const before = JSON.stringify(args);
+      const res = func(...args);
+      if (res instanceof Promise) {
+        let resolve;
+        const difference = new Promise(r => resolve = r);
+        res.then(dontCare => {
+          const after = JSON.stringify(args);
+          resolve(before === after ? undefined : `[${before}, ${after}]`);
+        });
+        return [res, difference];
+      }
+      const after = JSON.stringify(args);
+      return before === after ? [res] : [res, `[${before}, ${after}]`];
+    }
+    fun.name = '_mutationCheck_' + func.name;
+    return fun;
+  }
+
+
+</script>

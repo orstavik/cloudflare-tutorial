@@ -1,0 +1,103 @@
+<script>
+
+  function memoize(fun) {
+    const cache = {};
+    return function (...args) {
+      const key = JSON.stringify(args);
+      return key in cache ? cache[key] : (cache[key] = fun(...args));
+    }
+  }
+
+  const sum = function(a,b){
+    return a+b;
+  }
+  const memoSum = memoize(sum);
+
+  const four = memoSum(2,2);
+  const theCachedFour = memoSum(2,2);
+
+  function memoize(func) {
+    const cache = {};
+    const memoized = function (...args) {
+      const key = JSON.stringify(args);
+      if (cache[key]) return cache[key];
+      return cache[key] = func(...args);
+    }
+    memoized.name = '_memo_' + func.name;
+    return memoized;
+  }
+
+  function asyncMemoize(func) {
+    const cache = {};
+    const memoized = async function (...args) {
+      const key = JSON.stringify(args);
+      if (cache[key]) return cache[key];
+      const res = await func(...args);
+      return cache[key] = res;
+    }
+    memoized.name = '_asyncMemo_' + func.name;
+    return memoized;
+  }
+
+  //this function handles both async and sync. It will essentially only
+  function superMemoize(func) {
+    const cache = {};
+    const memoized = function (...args) {
+      const key = JSON.stringify(args);
+      if (cache[key])
+        return cache[key];
+      const res = func(...args);
+      if (!(res instanceof Promise))
+        return cache[key] = res;
+      let resolve, reject;
+      const res2 = new Promise((r, e) => (resolve = r, reject = e));
+      cache[key] = res2;
+      res.then(data => (cache[key] = data, resolve(data)));
+      res.catch(data => (delete cache[key], reject(data)));
+      return res2;
+    }
+    memoized.name = '_memo_' + func.name;
+    return memoized;
+  }
+
+  function divide(x, y) {
+    return x / y;
+  }
+
+  async function delayedDivide(a, b) {
+    await new Promise(r => setTimeout(r, 10));
+    return a / b;
+  }
+
+  const superMemoDivide = superMemoize(delayedDivide);
+
+  (async function () {
+    const one = superMemoDivide(2, 2);  //
+    const two = superMemoDivide(2, 2);  //returns the same promise as one
+    const oneValue = await one;
+    const twoValue = await two;     //both are now 1
+    await new Promise(r => setTimeout(r, 100));
+    const three = superMemoDivide(2, 2); //returns 1 immediately, no need for await.
+  })();
+
+  (async function () {
+    const one = superMemoDivide(2, 0);  //
+    const two = superMemoDivide(2, 0);  //returns the same promise as one
+    try{
+      const oneValue = await one;
+    } catch(err){
+      console.log(err);
+    }
+    try{
+      const twoValue = await two;
+    } catch(err){                  //this is the same error as the other one
+      console.log(err);
+    }
+    await new Promise(r => setTimeout(r, 100));
+    const three = superMemoDivide(2, 0); //returns 1 immediately
+    console.log('errors are not memoized, so this looks ok.');
+    console.log(three, 'is a promise');
+    //todo we could instead, make the error permanent, so that if you try the same function with the same arguments, then it would throw an error again, without calling the func. But that is bad i think, maybe it has fixed itself in the meantime, and you can now call it.
+  })();
+
+</script>

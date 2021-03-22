@@ -1,0 +1,30 @@
+<script>
+
+
+  //when the inside function returns a result sync, then the previousOutput is updated immediately
+  //when the inside function returns an async result, then the promise is returned immediately,
+  // and the previousOutput is update when the promise resolves. Rejected Promises are of course ignored.
+  function reuse(fun){
+
+    function reuseImpl(a, b) {
+      if (a === b || !(a instanceof Object && b instanceof Object))
+        return a;
+      let mismatch = false;
+      let c = {};
+      for (let key in a)
+        c[key] = reuseImpl(a[key], b[key]) === b[key] ? b[key] : (mismatch = true) && a[key];
+      return !mismatch && Object.keys(a).length === Object.keys(b).length ? b : c;
+    }
+
+    let previousOutput;
+    return function(...args){
+      const res = fun(...args);
+      if(res instanceof Promise){
+        res.then(resLater => previousOutput = reuseImpl(resLater, previousOutput));
+        return res;
+      }
+      return previousOutput = reuseImpl(res, previousOutput);
+    }
+  }
+
+</script>

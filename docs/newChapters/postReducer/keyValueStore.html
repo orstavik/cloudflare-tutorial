@@ -1,0 +1,46 @@
+<script>
+
+  function keyValueStore(kvTable, fun) {
+    if (fun === undefined) {
+      return function (...args) {
+        return kvTable.get(JSON.stringify(args));
+      }
+    }
+    return function (...args) {
+      const res = fun(...args);
+      if (res instanceof Promise) {
+        let resolve, reject;
+        const resultOfDatabaseInteraction = new Promise((r, e) => (resolve = r, reject = e));
+
+        res.then(async output => {
+          try {
+            const fromDb = await kvTable.put(JSON.stringify(args), output);
+            resolve(fromDb);
+          } catch (err){
+            reject(err);
+          }
+        });
+        res.catch(err =>{
+          reject('the database was not contacted because the inner function failed.');
+        })
+        return [res, resultOfDatabaseInteraction];
+      } else {
+        const resultOfDatabaseInteraction =  kvTable.put(JSON.stringify(args), res);
+        return [res, resultOfDatabaseInteraction];
+      }
+    }
+  }
+
+  function doSomething(one, two) {
+    return "hello sunshine" + one + two;
+  }
+
+  const putIntoDatabase = keyValueStore(table, doSomething);
+  const getFromDatabase = keyValueStore(table);
+
+  const [output, ready] = putIntoDatabase(1, 2);
+
+  const output = getFromDatabase(1, 2);
+
+
+</script>

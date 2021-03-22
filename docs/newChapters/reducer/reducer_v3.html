@@ -1,0 +1,195 @@
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  summary {
+    height: 1em;
+    width: 100%;
+  }
+  details[open] {
+    width: 100%;
+    height: calc(100vh - 2em);
+  }
+  #editor {
+    width: 100%;
+    height: calc(100% - 2em);
+  }
+  #viewer {
+    width: 100vw;
+    height: calc(100% - 2em);
+  }
+</style>
+<details>
+  <summary>Editor</summary>
+  <textarea name="editor" id="editor"></textarea>
+  <script type="module" id="editorScript">
+    function maybeError(request) {
+      if (new URL(request.url).pathname === '/error')
+        throw new SyntaxError('bobsibob');
+      return 'world';
+    }
+
+    function maybeErrorHandler(maybeError) {
+      const replace = new Error('this is a public hello world error message.');
+      replace.status = 403;
+      return replace;
+    }
+
+    function errorToResult(error) {
+      return new Response(error.toString() + '\nLog: ' + undefined, {status: error.status || 404});
+    }
+
+    async function helloSunshine() {
+      await new Promise(r => setTimeout(r, 500));
+      return new Response('hello sunshine');
+    }
+
+    async function tooLate() {
+      await new Promise(r => setTimeout(r, 1000));
+      return "this function runs after the last observer";
+    }
+
+    async function log(response, hello) {
+      const clone = response.clone();
+      await new Promise(r => setTimeout(r, 500));
+      console.log('logging later ' + clone.status + hello);
+      // fetch('log', data);
+    }
+
+    const listOfActions = [
+      [['request'], () => '1', 'a', 'a'],
+      [['request'], () => {
+        throw new Error('should never happen')
+      }, 'a', 'response'],
+      [['&&a'], ()=>1, 'no', 'No'],
+      [['&a', 'a'], console.log],
+
+      [['request'], tooLate, 'tooLate'],
+      [['maybeError'], ()=>1],    //observer that will run earlier
+
+      [['request'], ({url}) => "hello1 " + url, "!cache1"],
+      [['request', 'a'], ({url}) => "hello2 " + url, "!cache2"],
+      [['a'], ({url}) => "hello3 " + url, "!cache3"],
+
+      [['request'], maybeError, 'hello', 'maybeError'],
+      [['maybeError'], maybeErrorHandler, 'error'],
+      [['request'], helloSunshine, 'response'],
+      [['error'], errorToResult, 'response', 'response'],
+      [['response', '*hello'], log],
+    ];
+
+    window.url = 'https://vg.no/error';
+  </script>
+  <pre id="after" hidden>
+
+  //todo 4. highjack the console log of the iframe so to get out the links to the views, if we need/want.
+
+  import {rrListener} from "./ResponseRace.js";
+
+  let previousState;
+  function checkMutations(msg){
+    const nowObj = JSON.parse(atob(msg));
+    const i = nowObj.sequence.length;
+    const variables = nowObj.variables;
+    if(previousState){
+      for (let [key, oldVal] of Object.entries(previousState)) {
+        const newVal = variables[key];
+        const oldString = JSON.stringify(oldVal);
+        const newString = JSON.stringify(newVal);
+        if(oldString !== newString)
+          window.parent.postMessage('!' + i + '!' + btoa(oldString) +'!' + btoa(newString), '*');
+      }
+    }
+    previousState = nowObj.variables;
+  }
+
+  function debug(msg){
+    window.doMutationCheck && checkMutations(msg);
+    console.log(msg);
+    window.parent.postMessage(msg, '*');
+  }
+
+  const fetch = Object.assign(
+    new Event('fetch'), {
+      passThroughOnException: () => console.log('passThroughOnException.'),
+      waitUntil: async data => console.log('waitUntil: ', await data),
+      respondWith: async data => console.log('respondWith: ', await data),
+      request: {url: window.url}
+    });
+
+    const cache = {cache3: {'"1"': {success: 'sunshiny day'}}};
+  addEventListener('fetch', e => rrListener(listOfActions, e, debug, cache));
+
+  dispatchEvent(fetch);
+</pre>
+</details>
+<details>
+  <summary onclick="event.preventDefault()">
+    Open debug point in devtools: <input id="debug" type="checkbox" checkedx>.
+    Doublecheck mutations in actions: <input id="mutations" type="checkbox">.
+    <button id="run" autofocus>Run!</button>
+  </summary>
+  <h3>Below comes warnings:</h3>
+  <pre id="warnings"></pre>
+  <h3>Below comes auto generated unit tests:</h3>
+  <pre id="units"></pre>
+  <iframe id="runner" hidden></iframe>
+  <script>
+    (function () {
+
+      const editorScript = document.querySelector('#editorScript');
+      const after = document.querySelector('#after');
+      const runner = document.querySelector('#runner');
+      const ta = document.querySelector('textarea');
+
+      //init
+      ta.value = editorScript.innerText;
+
+      function runInIframe() {
+        document.querySelector("#warnings").innerText = '';
+        const doDebug = document.querySelector('#debug').checked ? '\n\ndebugger;\n\n' : '';
+        const doMutationsCheck = document.querySelector('#mutations').checked ? '\n\nwindow.doMutationCheck = true;\n\n' : '';
+        const code = doDebug + doMutationsCheck + ta.value + after.innerText;
+        const file = `<html><base href="${location.href}"><script type="module">${code}<` + `/script></html>`;
+        var blob = new Blob([file], {type: "text/html"});
+        var blob_url = URL.createObjectURL(blob);
+        runner.src = blob_url;
+      }
+
+      document.querySelector("#run").addEventListener('click', runInIframe);
+
+      function updateViewer(e) {
+        const msg = e.data;
+        if (msg[0] === '!') {
+          document.querySelector('#warnings').innerText += msg;
+        } else {
+          document.querySelector('#viewer').src = 'https://orstavik.github.io/cloudflare-tutorial/debug.html#' + msg;
+        }
+      }
+
+      addEventListener('message', updateViewer);
+    })();
+  </script>
+</details>
+<details open>
+  <summary>View debugger</summary>
+  <iframe id="viewer" src="https://orstavik.github.io/cloudflare-tutorial/debug.html"></iframe>
+</details>
+<pre hidden>
+todo the purpose of the reducer pattern is to make the logic more declarative.
+
+e is the state, but because it is async, we must decorate the state, and not replace it.
+reducer is a pure(-ish) function. It can get data from outside, and it can use only the data in the incoming state.
+errors needs to be masked on a reducer/reducer basis.
+
+the properties of the context object is *both* a property *and* a state marker at the same time.
+the property is both a point in space and a point in time.
+
+when more than one promise leads to a property, then first come first serve.
+This way, reducers can race to reach a point in space/time, and only the first reducer will fill the space/win the race.
+a reducer will not start until all its marked dependencies are fulfilled.
+
+This is a time/machine, as much as it is a state.
+</pre>

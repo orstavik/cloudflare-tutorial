@@ -1,0 +1,28 @@
+<script>
+
+  function accumulate(fun, ms) {
+    let cache = [];
+    let promise;
+    return function (arg) {
+      cache.push(arg);
+      if (cache.length !== 1)
+        return promise;
+      promise = new Promise(r => setTimeout(async () => {
+        const x = cache;
+        cache = [];
+        await fun(x);
+        r();
+      }, ms));
+    }
+  }
+
+  async function log(data){
+    const payload = JSON.stringify(data);
+    await fetch('mylog.com', {
+      body: payload
+    });
+  }
+
+  const accumulatedLog = accumulate(log, 29000);
+
+</script>
