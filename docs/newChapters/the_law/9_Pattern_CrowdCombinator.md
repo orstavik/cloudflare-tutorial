@@ -10,7 +10,7 @@ A CrowdCombinator makes *three* additions to a normal combinator:
 
 1. The CrowdCombinator takes a *list* of original functions as input and outputs a *list* of regulator functions.
 2. The CrowdCombinator establishes a) a closure that b) can hold variables that c) all its regulators can access, but that d) are hidden from interference from outside.
-3. The CrowdCombinator returns an **extra output**. The extra output is either a `function` or a `Promise`, and it should be returned as the *last* output of the CrowdCombinator. The extra output is optional, but most CrowdCombinators need/benefit greatly from it.
+3. The CrowdCombinator returns an **additional output**. The additional output is either a `function`, `Promise`, or `Object`, and it should be returned as the *last* output of the CrowdCombinator. The additional output is optional, but common.
 
 The basic principle behind a CrowdCombinator is as follows:
 
