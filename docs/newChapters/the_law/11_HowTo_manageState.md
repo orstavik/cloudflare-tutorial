@@ -76,7 +76,7 @@ function stateManager(...originals) {
   //return the trace. If an object is passed in, then any argument or output value matching a property will be renamed.
   function inspectState(obj = {}) {
     const reverseLookup = new Map(Object.entries(obj).map(([one, two]) => [two, one]));
-    return trace.map(({id, name, type, output, error, pending, promise}) => {
+    return trace.map(({id, name, type, output, error, pending, args}) => {
       const res = {id, name, type};
       pending && (res.pending = true);
       type && (res.type = type);
@@ -108,7 +108,7 @@ function stateManager(...originals) {
 Math.sum = (a, b) => a + b;
 
 
-const [inspectState, ready, sum, pow, sqrt] = listInvocations(Math.sum, Math.pow, Math.sqrt);
+const [inspectState, ready, sum, pow, sqrt] = stateManager(Math.sum, Math.pow, Math.sqrt);
 
 function hypotenuse(a, b) {
   return sqrt(sum(pow(a, 2), pow(b, 2)));
